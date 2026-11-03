@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 import { fontNameSchema } from './font-name-schema.js';
 import type { ToolSpec } from './spec.js';
+import {
+  leadingTrimSchema,
+  listSpacingSchema,
+  textDecorationColorSchema,
+  textDecorationOffsetSchema,
+  textDecorationSkipInkSchema,
+  textDecorationStyleSchema,
+  textDecorationThicknessSchema,
+} from './text-detail-schema.js';
 
 export const SET_TEXT_PROPERTIES_TOOL_NAME = 'set_text_properties';
 
@@ -26,7 +35,13 @@ export const setTextPropertiesTool: ToolSpec = {
     'paragraphSpacing / paragraphIndent (px between / indenting the paragraphs the text splits ' +
     'into at "\\n" — the write half of the same fields get_design_context reads), textWrapStyle ' +
     '(BALANCE evens the line lengths of a heading, PRETTY avoids an orphan last word — the same ' +
-    'three values as CSS text-wrap) — these load the required fonts first. Alignment: ' +
+    'three values as CSS text-wrap), leadingTrim (CAP_HEIGHT trims the box to the glyphs), ' +
+    'listSpacing (px between list items), hangingPunctuation / hangingList (let quotation marks ' +
+    'or bullets hang outside the box) — these load the required fonts first. Decoration ' +
+    'details — textDecorationStyle (SOLID / WAVY / DOTTED), textDecorationOffset, ' +
+    'textDecorationThickness, textDecorationColor, textDecorationSkipInk — describe an underline or ' +
+    'strikethrough, so set textDecoration to UNDERLINE / STRIKETHROUGH (in this call or earlier); ' +
+    'Figma reads them back as null on undecorated text, and may refuse them there. Alignment: ' +
     'textAlignHorizontal (CSS text-align; JUSTIFIED = justify) and textAlignVertical (where the ' +
     'text sits in a box taller than it — it only shows with a fixed height, textAutoResize NONE ' +
     'or WIDTH_AND_HEIGHT hugging leaves no slack). Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
@@ -60,6 +75,21 @@ export const setTextPropertiesTool: ToolSpec = {
       .enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE', 'SMALL_CAPS', 'SMALL_CAPS_FORCED'])
       .optional(),
     textDecoration: z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']).optional(),
+    textDecorationStyle: textDecorationStyleSchema.optional(),
+    textDecorationOffset: textDecorationOffsetSchema.optional(),
+    textDecorationThickness: textDecorationThicknessSchema.optional(),
+    textDecorationColor: textDecorationColorSchema.optional(),
+    textDecorationSkipInk: textDecorationSkipInkSchema.optional(),
+    leadingTrim: leadingTrimSchema.optional(),
+    listSpacing: listSpacingSchema.optional(),
+    hangingPunctuation: z
+      .boolean()
+      .optional()
+      .describe('Quotation marks / punctuation at the line start hang outside the text box'),
+    hangingList: z
+      .boolean()
+      .optional()
+      .describe('List bullets / numbers hang outside the text box instead of indenting the text'),
     textAlignHorizontal: z
       .enum(['LEFT', 'CENTER', 'RIGHT', 'JUSTIFIED'])
       .optional()

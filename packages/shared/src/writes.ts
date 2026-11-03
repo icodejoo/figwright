@@ -13,6 +13,15 @@ export const MutateResultSchema = z.object({
 export type MutateResult = z.infer<typeof MutateResultSchema>;
 
 /**
+ * Result of reorder_grid_tracks: the tracks that changed index, as Figma reports them - the input
+ * tracks plus any a spanning child pulled in, so the caller sees what really moved.
+ */
+export const ReorderGridTracksResultSchema = MutateResultSchema.extend({
+  moves: z.array(z.object({ from: z.number(), to: z.number() })),
+});
+export type ReorderGridTracksResult = z.infer<typeof ReorderGridTracksResultSchema>;
+
+/**
  * Result of apply_animation_style: echoes the applied-style instance id Figma returns from
  * applyAnimationStyle. batch's inverse uses it to removeAnimationStyle on undo, so it must
  * round-trip.
@@ -115,6 +124,7 @@ export const UpdateCollectionResultSchema = z.object({
   collectionId: z.string(),
   name: z.string(),
   modes: z.array(z.object({ modeId: z.string(), name: z.string() })),
+  hiddenFromPublishing: z.boolean().optional(),
 });
 export type UpdateCollectionResult = z.infer<typeof UpdateCollectionResultSchema>;
 
@@ -150,6 +160,10 @@ export const VariableResultSchema = z.object({
   name: z.string(),
   /** The per-platform declarations now in effect (set_variable_code_syntax echoes them back). */
   codeSyntax: z.record(z.string(), z.string()).optional(),
+  /** Update_variable echoes the metadata as it now stands. */
+  description: z.string().optional(),
+  scopes: z.array(z.string()).optional(),
+  hiddenFromPublishing: z.boolean().optional(),
 });
 export type VariableResult = z.infer<typeof VariableResultSchema>;
 

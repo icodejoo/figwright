@@ -300,3 +300,50 @@ describe('get_variable_defs handler', () => {
     expect('colorProfile' in result).toBe(marked);
   });
 });
+
+describe('get_variable_defs metadata', () => {
+  const collection = {
+    id: 'VC:1',
+    name: 'Palette',
+    key: 'ck',
+    defaultModeId: 'm1',
+    modes: [{ modeId: 'm1', name: 'Mode 1' }],
+    variableIds: ['V:1'],
+  };
+  const variable = {
+    id: 'V:1',
+    name: 'blue/500',
+    key: 'vk',
+    resolvedType: 'COLOR',
+    variableCollectionId: 'VC:1',
+    valuesByMode: { m1: { r: 0, g: 0, b: 1, a: 1 } },
+  };
+
+  it('reports description and hiddenFromPublishing only when set', async () => {
+    const handler = createGetVariableDefsHandler(
+      fakeFigma(
+        [{ ...collection, hiddenFromPublishing: true }],
+        [{ ...variable, description: 'Brand blue', hiddenFromPublishing: true }],
+      ),
+    );
+    const result = (await handler({})) as GetVariableDefsResult;
+    expect(result.collections[0]?.hiddenFromPublishing).toBe(true);
+    expect(result.variables[0]).toMatchObject({
+      description: 'Brand blue',
+      hiddenFromPublishing: true,
+    });
+  });
+
+  it('adds nothing to a variable and collection with the defaults', async () => {
+    const handler = createGetVariableDefsHandler(
+      fakeFigma(
+        [{ ...collection, hiddenFromPublishing: false }],
+        [{ ...variable, description: '', hiddenFromPublishing: false }],
+      ),
+    );
+    const result = (await handler({})) as GetVariableDefsResult;
+    expect(result.collections[0]).not.toHaveProperty('hiddenFromPublishing');
+    expect(result.variables[0]).not.toHaveProperty('description');
+    expect(result.variables[0]).not.toHaveProperty('hiddenFromPublishing');
+  });
+});

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { textStyleBindingsSchema } from './binding-schema.js';
 import { fontNameSchema } from './font-name-schema.js';
 import type { ToolSpec } from './spec.js';
+import { textStyleTypographyShape } from './text-style-typography-schema.js';
 
 export const UPDATE_TEXT_STYLE_TOOL_NAME = 'update_text_style';
 
@@ -10,7 +11,9 @@ export const updateTextStyleTool: ToolSpec = {
   name: UPDATE_TEXT_STYLE_TOOL_NAME,
   description:
     'Update an existing text style (typography token) by id. Any of name / fontName / fontSize / ' +
-    'lineHeight / letterSpacing / textWrapStyle / description may be omitted to leave unchanged. A new font is ' +
+    'lineHeight / letterSpacing / textWrapStyle / textCase / textDecoration / leadingTrim / ' +
+    'paragraphSpacing / paragraphIndent / listSpacing / hangingPunctuation / hangingList / ' +
+    'description may be omitted to leave unchanged. A new font is ' +
     'loaded before assignment. lineHeight unit is AUTO / PIXELS / PERCENT (AUTO omits value); ' +
     'letterSpacing unit is PIXELS / PERCENT. Use this to keep a shared style in sync with code ' +
     'instead of creating a duplicate. Returns { ok, styleId, name }.',
@@ -29,6 +32,7 @@ export const updateTextStyleTool: ToolSpec = {
       .describe(
         'Line-break balancing every node bound to this style inherits; maps 1:1 to CSS text-wrap',
       ),
+    ...textStyleTypographyShape,
     boundVariables: textStyleBindingsSchema.optional(),
     description: z.string().optional(),
   }),

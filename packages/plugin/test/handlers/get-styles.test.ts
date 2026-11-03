@@ -464,3 +464,82 @@ describe('get_styles handler — variable bindings', () => {
     expect('colorProfile' in result).toBe(marked);
   });
 });
+
+describe('get_styles text-style typography beyond font and size', () => {
+  const base = {
+    id: 'S:9',
+    name: 'Label',
+    key: 'k9',
+    description: '',
+    fontName: { family: 'Inter', style: 'Regular' },
+    fontSize: 12,
+    lineHeight: { unit: 'AUTO' },
+    letterSpacing: { unit: 'PERCENT', value: 0 },
+    textWrapStyle: 'AUTO',
+  };
+
+  it('reports each field only when it differs from the default', async () => {
+    const handler = createGetStylesHandler(
+      fakeFigma({
+        texts: [
+          {
+            ...base,
+            textCase: 'UPPER',
+            textDecoration: 'UNDERLINE',
+            leadingTrim: 'CAP_HEIGHT',
+            paragraphIndent: 4,
+            paragraphSpacing: 8,
+            listSpacing: 6,
+            hangingPunctuation: true,
+            hangingList: true,
+          },
+        ],
+      }),
+    );
+    const result = (await handler({})) as GetStylesResult;
+    expect(result.texts[0]).toMatchObject({
+      textCase: 'UPPER',
+      textDecoration: 'UNDERLINE',
+      leadingTrim: 'CAP_HEIGHT',
+      paragraphIndent: 4,
+      paragraphSpacing: 8,
+      listSpacing: 6,
+      hangingPunctuation: true,
+      hangingList: true,
+    });
+  });
+
+  it('leaves an ordinary style exactly as it was', async () => {
+    const handler = createGetStylesHandler(
+      fakeFigma({
+        texts: [
+          {
+            ...base,
+            textCase: 'ORIGINAL',
+            textDecoration: 'NONE',
+            leadingTrim: 'NONE',
+            paragraphIndent: 0,
+            paragraphSpacing: 0,
+            listSpacing: 0,
+            hangingPunctuation: false,
+            hangingList: false,
+          },
+        ],
+      }),
+    );
+    const result = (await handler({})) as GetStylesResult;
+    expect(Object.keys(result.texts[0]!).toSorted()).toEqual(
+      [
+        'description',
+        'fontName',
+        'fontSize',
+        'id',
+        'key',
+        'letterSpacing',
+        'lineHeight',
+        'name',
+        'textWrapStyle',
+      ].toSorted(),
+    );
+  });
+});

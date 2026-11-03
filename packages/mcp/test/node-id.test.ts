@@ -86,6 +86,7 @@ describe('normalizeIdArgs', () => {
   it('never rewrites non-canvas id namespaces (style / variable / key ids)', () => {
     const args = {
       styleId: 'S:abc123,',
+      afterStyleId: 'S:ref456,',
       variableId: 'VariableID:1:23',
       componentKey: 'a1b2c3d4',
       propertyId: 'Show Icon#12:5',
@@ -111,6 +112,7 @@ describe('normalizeIdArgs', () => {
     // namespace (allowlisted below, never URL-pasteable). Nested ids stay out of scope by design.
     const NON_CANVAS_ID_FIELDS = new Set([
       'styleId', // shared-style ids (S:…)
+      'afterStyleId', // style-order reference, same non-canvas namespace as styleId
       'variableId', // variable ids (VariableID:…)
       'collectionId', // variable-collection ids
       'propertyId', // component-property handles (name#id)

@@ -18,8 +18,10 @@ import {
   type SerializedShaderProperty,
   type SerializedShaderValue,
   type SerializedStyleIds,
+  type SerializedTextDecorationMetric,
   type SerializedTextSegment,
   serializeNode as serializeBase,
+  toHex,
   TOOL_RESULT_LIMIT_BYTES,
 } from '@figwright/shared';
 
@@ -595,8 +597,13 @@ const collectComponentProperties = (node: SceneNode, out: SerializedNode): void 
 const collectPropertyReferences = (node: SceneNode, out: SerializedNode): void => {
   const raw = (node as { componentPropertyReferences?: unknown }).componentPropertyReferences;
   if (typeof raw !== 'object' || raw === null) return;
-  const refs: { visible?: string; characters?: string; mainComponent?: string } = {};
-  for (const field of ['visible', 'characters', 'mainComponent'] as const) {
+  const refs: {
+    visible?: string;
+    characters?: string;
+    mainComponent?: string;
+    slotContentId?: string;
+  } = {};
+  for (const field of ['visible', 'characters', 'mainComponent', 'slotContentId'] as const) {
     const value = (raw as Record<string, unknown>)[field];
     if (typeof value === 'string' && value !== '') refs[field] = value;
   }
@@ -609,6 +616,11 @@ const enrichWithMixins = (
   parent: BaseNode | null,
 ): SerializedNode => {
   const out: SerializedNode = { ...base };
+
+  if (node.type === 'INSTANCE' && typeof node.scaleFactor === 'number' && node.scaleFactor !== 1)
+    out.scaleFactor = node.scaleFactor;
+  if (node.type === 'SLOT' && node.limitViolations?.length > 0)
+    out.limitViolations = [...node.limitViolations];
 
   if ('rotation' in node) {
     const rotation = node.rotation;
@@ -936,6 +948,7 @@ const enrichWithMixins = (
     out.maxLines = text.maxLines;
     if (typeof text.paragraphSpacing === 'number') out.paragraphSpacing = text.paragraphSpacing;
     if (typeof text.paragraphIndent === 'number') out.paragraphIndent = text.paragraphIndent;
+    serializeTextExtras(text, out);
     // Wrap balancing is per paragraph, so it is `mixed` (a symbol) as soon as two paragraphs
     // disagree. Emit the uniform case node-level; the mixed case drives needsSegments below so the
     // per-paragraph values survive in `segments` rather than vanishing.
@@ -1016,6 +1029,50 @@ const serializeTextPath = (text: TextPathNode, out: SerializedNode): void => {
     linkMixed;
   if (needsSegments && text.characters.length > 0) {
     out.segments = serializeTextSegments(text);
+  }
+};
+
+/** `{ unit, value? }` of a decoration offset / thickness; undefined for AUTO, mixed or absent. */
+const serializeDecorationMetric = (metric: unknown): SerializedTextDecorationMetric | undefined => {
+  if (typeof metric !== 'object' || metric === null) return undefined;
+  const m = metric as { unit?: unknown; value?: unknown };
+  if (typeof m.unit !== 'string' || m.unit === 'AUTO') return undefined;
+  return typeof m.value === 'number' ? { unit: m.unit, value: m.value } : { unit: m.unit };
+};
+
+/**
+ * The rarer node-level text settings: leading trim, list spacing, hanging flags, the decoration
+ * details and the diverging OpenType features. Each goes out only off its default and only when
+ * uniform (a `mixed` symbol is skipped, like `textWrapStyle`), so ordinary text serializes exactly
+ * as before — the read half of set_text_properties' matching arguments.
+ */
+const serializeTextExtras = (text: TextNode, out: SerializedNode): void => {
+  const t = text as unknown as Record<string, unknown>;
+  if (typeof t.leadingTrim === 'string' && t.leadingTrim !== 'NONE') {
+    out.leadingTrim = t.leadingTrim;
+  }
+  if (typeof t.listSpacing === 'number' && t.listSpacing !== 0) out.listSpacing = t.listSpacing;
+  if (t.hangingPunctuation === true) out.hangingPunctuation = true;
+  if (t.hangingList === true) out.hangingList = true;
+  // The decoration details read null while the text is not decorated, so they only ever appear on
+  // an underlined or struck-through node.
+  if (typeof t.textDecorationStyle === 'string' && t.textDecorationStyle !== 'SOLID') {
+    out.textDecorationStyle = t.textDecorationStyle;
+  }
+  const offset = serializeDecorationMetric(t.textDecorationOffset);
+  if (offset !== undefined) out.textDecorationOffset = offset;
+  const thickness = serializeDecorationMetric(t.textDecorationThickness);
+  if (thickness !== undefined) out.textDecorationThickness = thickness;
+  const swatch = (t.textDecorationColor as { value?: unknown } | null | undefined)?.value;
+  if (typeof swatch === 'object' && swatch !== null && 'color' in swatch) {
+    const paint = swatch as SolidPaint;
+    out.textDecorationColor = toHex(paint.color, paint.opacity ?? 1);
+  }
+  if (t.textDecorationSkipInk === false) out.textDecorationSkipInk = false;
+  const features = t.openTypeFeatures;
+  if (typeof features === 'object' && features !== null) {
+    const set = Object.entries(features).filter(([, on]) => typeof on === 'boolean');
+    if (set.length > 0) out.openTypeFeatures = Object.fromEntries(set) as Record<string, boolean>;
   }
 };
 

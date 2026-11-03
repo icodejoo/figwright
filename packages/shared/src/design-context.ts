@@ -20,6 +20,7 @@ import {
   SerializedMainComponentSchema,
   SerializedPaintSchema,
   SerializedStyleIdsSchema,
+  SerializedTextDecorationMetricSchema,
   SerializedTextPathStartSchema,
   SerializedTransformModifierSchema,
   SerializedVariableWidthStrokeSchema,
@@ -40,6 +41,7 @@ import type {
   SerializedMainComponent,
   SerializedPaint,
   SerializedStyleIds,
+  SerializedTextDecorationMetric,
   SerializedTextPathStart,
   SerializedTransformModifier,
   SerializedVariableWidthStroke,
@@ -230,6 +232,20 @@ export interface DesignContextNode {
   paragraphSpacing?: number;
   paragraphIndent?: number;
   /**
+   * The rarer node-level text settings (see SerializedNode): present only off the default and only
+   * when uniform across the node. Per-node and inline — not folded into the textStyle bundle.
+   */
+  leadingTrim?: string;
+  listSpacing?: number;
+  hangingPunctuation?: boolean;
+  hangingList?: boolean;
+  textDecorationStyle?: string;
+  textDecorationOffset?: SerializedTextDecorationMetric;
+  textDecorationThickness?: SerializedTextDecorationMetric;
+  textDecorationColor?: string;
+  textDecorationSkipInk?: boolean;
+  openTypeFeatures?: Record<string, boolean>;
+  /**
    * Line-break balancing per paragraph: BALANCE (even line lengths — headings, pull quotes) or
    * PRETTY (no orphan last word). Figma's values are CSS `text-wrap`'s verbatim, so this maps
    * straight through instead of being eyeballed off the raster. Style-level (a Figma text style
@@ -285,6 +301,7 @@ export interface DesignContextNode {
     readonly visible?: string;
     readonly characters?: string;
     readonly mainComponent?: string;
+    readonly slotContentId?: string;
   };
   /**
    * Motion (beta) summary — attached at full detail to nodes that carry animation, so codegen sees
@@ -295,6 +312,8 @@ export interface DesignContextNode {
   motion?: MotionSummary;
   mainComponent?: SerializedMainComponent;
   mainComponentId?: string;
+  scaleFactor?: number;
+  limitViolations?: ('BELOW_MIN' | 'ABOVE_MAX' | 'HAS_NON_PREFERRED')[];
   /**
    * GlobalVars refs (P3): when style dedup runs (full detail), inline `fills` / `strokes` /
    * `effects` / (`fontSize` + `fontName`) are replaced by these refs into `globalVars.styles` — a
@@ -437,6 +456,16 @@ export const DesignContextNodeSchema = z.lazy(() =>
     textDecoration: z.union([z.string(), z.literal(MIXED)]).optional(),
     paragraphSpacing: z.number().optional(),
     paragraphIndent: z.number().optional(),
+    leadingTrim: z.string().optional(),
+    listSpacing: z.number().optional(),
+    hangingPunctuation: z.boolean().optional(),
+    hangingList: z.boolean().optional(),
+    textDecorationStyle: z.string().optional(),
+    textDecorationOffset: SerializedTextDecorationMetricSchema.optional(),
+    textDecorationThickness: SerializedTextDecorationMetricSchema.optional(),
+    textDecorationColor: z.string().optional(),
+    textDecorationSkipInk: z.boolean().optional(),
+    openTypeFeatures: z.record(z.string(), z.boolean()).optional(),
     textWrapStyle: z.string().optional(),
     textAlignHorizontal: z.string().optional(),
     textAlignVertical: z.string().optional(),
@@ -479,6 +508,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
         visible: z.string().optional(),
         characters: z.string().optional(),
         mainComponent: z.string().optional(),
+        slotContentId: z.string().optional(),
       })
       .optional(),
     motion: z
@@ -490,6 +520,8 @@ export const DesignContextNodeSchema = z.lazy(() =>
       .optional(),
     mainComponent: SerializedMainComponentSchema.optional(),
     mainComponentId: z.string().optional(),
+    scaleFactor: z.number().optional(),
+    limitViolations: z.array(z.enum(['BELOW_MIN', 'ABOVE_MAX', 'HAS_NON_PREFERRED'])).optional(),
     fill: z.string().optional(),
     stroke: z.string().optional(),
     effect: z.string().optional(),
@@ -685,6 +717,8 @@ const CONTENT_FIELDS = [
   // all — a prop-driven string becomes a literal and a BOOLEAN-gated layer becomes unconditional.
   // That is a structural contract, not appearance, so it rides with layout rather than being shed.
   'componentPropertyReferences',
+  'scaleFactor',
+  'limitViolations',
   // The designer's Dev Mode notes: explicit instructions that outrank inference, so dropping them
   // while keeping geometry would be backwards.
   'annotations',

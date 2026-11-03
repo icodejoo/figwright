@@ -72,6 +72,8 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   // full — unchanged from the original projection: serializeFlatSync once, every field from flat.
   const flat = serializeFlatSync(node);
   const out: DesignContextNode = { id: flat.id, name: flat.name, type: flat.type };
+  if (flat.scaleFactor !== undefined) out.scaleFactor = flat.scaleFactor;
+  if (flat.limitViolations !== undefined) out.limitViolations = flat.limitViolations;
   // No-op defaults are omitted (consistent with every other field here): absent visible = true,
   // absent rotation = 0, absent opacity = 1, absent cornerRadius = 0 (unrounded). Strict equality so
   // a 0.0001-rad rotation or a 0.99 opacity still surfaces; `mixed` corners (the MIXED symbol) are
@@ -181,6 +183,23 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (typeof flat.paragraphIndent === 'number' && flat.paragraphIndent !== 0) {
     out.paragraphIndent = flat.paragraphIndent;
   }
+  // The rarer text settings (leading trim, list spacing, hanging flags, decoration details,
+  // diverging OpenType features) — the serializer already omits each at its default, so presence
+  // alone means a real value. Inline per node: they do not fold into the textStyle bundle.
+  if (flat.leadingTrim !== undefined) out.leadingTrim = flat.leadingTrim;
+  if (flat.listSpacing !== undefined) out.listSpacing = flat.listSpacing;
+  if (flat.hangingPunctuation !== undefined) out.hangingPunctuation = flat.hangingPunctuation;
+  if (flat.hangingList !== undefined) out.hangingList = flat.hangingList;
+  if (flat.textDecorationStyle !== undefined) out.textDecorationStyle = flat.textDecorationStyle;
+  if (flat.textDecorationOffset !== undefined) out.textDecorationOffset = flat.textDecorationOffset;
+  if (flat.textDecorationThickness !== undefined) {
+    out.textDecorationThickness = flat.textDecorationThickness;
+  }
+  if (flat.textDecorationColor !== undefined) out.textDecorationColor = flat.textDecorationColor;
+  if (flat.textDecorationSkipInk !== undefined) {
+    out.textDecorationSkipInk = flat.textDecorationSkipInk;
+  }
+  if (flat.openTypeFeatures !== undefined) out.openTypeFeatures = flat.openTypeFeatures;
   // Wrap balancing — style-level like the paragraph fields, omitted at the AUTO default so only a
   // deliberately balanced heading / pretty-wrapped paragraph shows. Figma's three values are CSS
   // `text-wrap`'s, so this reaches codegen as a value to emit, not one to infer.

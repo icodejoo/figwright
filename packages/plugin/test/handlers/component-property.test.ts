@@ -11,6 +11,68 @@ const fakeFigma = (nodes: Record<string, unknown>): typeof figma =>
   ({ getNodeByIdAsync: async (id: string) => nodes[id] ?? null }) as unknown as typeof figma;
 
 describe('add_component_property handler', () => {
+  it('creates and edits SLOT settings, rejects inappropriate defaults, and binds frames via slotContentId', async () => {
+    const preferredValues = [{ type: 'COMPONENT', key: 'key' }];
+    const slotSettings = { minChildren: null, maxChildren: 4, stretchChildOnInsert: true };
+    const def = { type: 'SLOT', defaultValue: '' };
+    const comp = {
+      id: 'c',
+      type: 'COMPONENT',
+      parent: null,
+      componentPropertyDefinitions: { 'Content#1': def },
+      addComponentProperty: vi.fn<() => string>(() => 'Content#1'),
+      editComponentProperty: vi.fn<() => string>(() => 'Content#1'),
+    };
+    const frame = { id: 'f', type: 'FRAME', parent: comp, componentPropertyReferences: {} };
+    const ctx = fakeFigma({ c: comp, f: frame });
+    await createAddComponentPropertyHandler(ctx)({
+      componentId: 'c',
+      name: 'Content',
+      type: 'SLOT',
+      defaultValue: '',
+      preferredValues,
+      slotSettings,
+      description: 'Content',
+    });
+    expect(comp.addComponentProperty).toHaveBeenCalledWith('Content', 'SLOT', '', {
+      preferredValues,
+      slotSettings,
+      description: 'Content',
+    });
+    await createEditComponentPropertyHandler(ctx)({
+      componentId: 'c',
+      propertyId: 'Content#1',
+      slotSettings,
+      description: '',
+      preferredValues,
+    });
+    expect(comp.editComponentProperty).toHaveBeenCalledWith('Content#1', {
+      slotSettings,
+      description: '',
+      preferredValues,
+    });
+    await expect(
+      createEditComponentPropertyHandler(ctx)({
+        componentId: 'c',
+        propertyId: 'Content#1',
+        defaultValue: 'x',
+      }),
+    ).rejects.toThrow(/does not support defaultValue/);
+    await expect(
+      createAddComponentPropertyHandler(ctx)({
+        componentId: 'c',
+        name: 'Bad',
+        type: 'SLOT',
+        defaultValue: 'x',
+      }),
+    ).rejects.toThrow(/empty string/);
+    await createBindComponentPropertyHandler(ctx)({
+      nodeId: 'f',
+      propertyId: 'Content#1',
+      field: 'slotContentId',
+    });
+    expect(frame.componentPropertyReferences).toEqual({ slotContentId: 'Content#1' });
+  });
   it('declares a BOOLEAN property and returns its assigned id', async () => {
     const addComponentProperty = vi.fn<(n: string, t: string, d: unknown) => string>(
       name => `${name}#4:2`,

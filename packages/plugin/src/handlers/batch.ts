@@ -41,6 +41,7 @@ import {
   isMotionNode,
   toPlainJson,
 } from './motion-shared.js';
+import { siblingFolders, styleFolder, type StyleKind, styleOrderApi } from './style-order.js';
 import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
 
@@ -973,6 +974,53 @@ const autoLayoutInverse: BatchInverse = {
   resizes: (_params, captured) => [(captured as AutoLayoutState).id],
 };
 
+interface GridChildState {
+  id: string;
+  parentId: string;
+  geometry: GeometrySnapshot;
+}
+
+/**
+ * Set_grid_child: the child's cell, spans and per-cell alignment are all part of its geometry
+ * snapshot (captureGeometry keeps the anchors and GRID_CHILD fields). Spans go back to 1 first, so
+ * the cell the child is returned to is not blocked by the span the op gave it; restoreGeometry then
+ * places the cell and writes the original spans. The grid itself can resize (HUG tracks), so it is
+ * guarded too.
+ */
+const gridChildInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = stringParam(params, 'nodeId', 'set_grid_child');
+    const node = await nodeOf(figmaCtx, id, 'set_grid_child');
+    const parent = (node as SceneNode).parent as (BaseNode & { layoutMode?: string }) | null;
+    if (parent === null || parent.layoutMode !== 'GRID') {
+      throw new Error(
+        `batch/set_grid_child: node ${id} is not a direct child of a GRID frame at the start of the batch — ` +
+          'a batch reads every op starting state before it applies any, so a grid made or filled by an earlier op of the same batch is not seen; build the grid (set_auto_layout GRID, reparent_nodes) in a separate call first, then batch set_grid_child',
+      );
+    }
+    const state: GridChildState = {
+      id,
+      parentId: parent.id,
+      geometry: captureGeometry(node as SceneNode),
+    };
+    return state;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const { id, geometry } = captured as GridChildState;
+    const node = await live(figmaCtx, id);
+    if (node === null) return undefined;
+    writeIfDifferent(node, 'gridRowSpan', 1);
+    writeIfDifferent(node, 'gridColumnSpan', 1);
+    restoreGeometry(node as SceneNode, geometry);
+    return undefined;
+  },
+  touches: (_params, captured) => [(captured as GridChildState).id],
+  resizes: (_params, captured) => {
+    const s = captured as GridChildState;
+    return [s.id, s.parentId];
+  },
+};
+
 interface GeometryState {
   id: string;
   geometry: GeometrySnapshot;
@@ -1357,6 +1405,12 @@ const TEXT_STYLE_PROPS = [
   'paragraphSpacing',
   'paragraphIndent',
   'textWrapStyle',
+  'textCase',
+  'textDecoration',
+  'leadingTrim',
+  'listSpacing',
+  'hangingPunctuation',
+  'hangingList',
 ];
 const TEXT_STYLE_BINDABLE: readonly VariableBindableTextField[] = [
   'fontFamily',
@@ -1526,10 +1580,49 @@ const renameVariableInverse: BatchInverse = {
   },
 };
 
+interface VariableMeta {
+  id: string;
+  description: string;
+  scopes: VariableScope[];
+  hiddenFromPublishing: boolean;
+}
+
+/**
+ * Update_variable: description, scopes and the publishing flag all keep the id, so the capture is
+ * exact. Captured whatever the op intends to change — undo puts back what was there.
+ */
+const updateVariableInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = stringParam(params, 'variableId', 'update_variable');
+    const variable = await figmaCtx.variables.getVariableByIdAsync(id);
+    if (variable === null) throw new Error(`batch/update_variable: variable ${id} not found`);
+    return {
+      id,
+      description: variable.description,
+      scopes: [...variable.scopes],
+      hiddenFromPublishing: variable.hiddenFromPublishing,
+    } satisfies VariableMeta;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const was = captured as VariableMeta;
+    const variable = await figmaCtx.variables.getVariableByIdAsync(was.id);
+    if (variable === null) return undefined;
+    // Scopes first: a type that takes none (EASING / TIMING) never had any to put back, and the
+    // comparison keeps an untouched field from being written at all.
+    if (!same(variable.scopes, was.scopes)) variable.scopes = was.scopes;
+    if (variable.description !== was.description) variable.description = was.description;
+    if (variable.hiddenFromPublishing !== was.hiddenFromPublishing) {
+      variable.hiddenFromPublishing = was.hiddenFromPublishing;
+    }
+    return undefined;
+  },
+};
+
 interface CollectionNames {
   id: string;
   name: string;
   modes: { modeId: string; name: string }[];
+  hiddenFromPublishing: boolean;
 }
 
 /**
@@ -1551,6 +1644,7 @@ const updateVariableCollectionInverse: BatchInverse = {
       id,
       name: collection.name,
       modes: collection.modes.map(mode => ({ modeId: mode.modeId, name: mode.name })),
+      hiddenFromPublishing: collection.hiddenFromPublishing,
     } satisfies CollectionNames;
   },
   async undo(figmaCtx, _params, captured) {
@@ -1558,6 +1652,9 @@ const updateVariableCollectionInverse: BatchInverse = {
     const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(was.id);
     if (collection === null) return undefined;
     if (collection.name !== was.name) collection.name = was.name;
+    if (collection.hiddenFromPublishing !== was.hiddenFromPublishing) {
+      collection.hiddenFromPublishing = was.hiddenFromPublishing;
+    }
     for (const mode of was.modes) {
       if (collection.modes.some(m => m.modeId === mode.modeId && m.name !== mode.name)) {
         collection.renameMode(mode.modeId, mode.name);
@@ -1642,6 +1739,8 @@ interface EditPropertyState {
     name?: string;
     defaultValue?: PropertyValue;
     preferredValues?: InstanceSwapPreferredValue[];
+    description?: string;
+    slotSettings?: SlotSettings;
   };
 }
 
@@ -1664,6 +1763,17 @@ const editPropertyInverse: BatchInverse = {
     }
     const p = paramsOf(params);
     const previous: EditPropertyState['previous'] = {};
+    if (p.description !== undefined) previous.description = def.description ?? '';
+    if (p.slotSettings !== undefined) {
+      // Do not guess default booleans. The API does not expose a way to remove an absent setting.
+      const changed = p.slotSettings as SlotSettings;
+      if (Object.keys(changed).some(key => !(key in (def.slotSettings ?? {})))) {
+        throw new Error(
+          'batch/edit_component_property: slotSettings with absent prior keys has no faithful inverse; edit outside the batch',
+        );
+      }
+      previous.slotSettings = { ...def.slotSettings };
+    }
     if (typeof p.name === 'string') previous.name = propertyDisplayName(propertyId);
     if (p.defaultValue !== undefined)
       previous.defaultValue = def.boundVariables?.defaultValue ?? def.defaultValue;
@@ -1724,6 +1834,10 @@ const bindPropertyInverse: BatchInverse = {
   async capture(figmaCtx, params) {
     const id = stringParam(params, 'nodeId', 'bind_component_property');
     const field = stringParam(params, 'field', 'bind_component_property');
+    if (field === 'slotContentId')
+      throw new Error(
+        'batch/bind_component_property: converting a frame to/from SLOT has no verified inverse; bind outside the batch',
+      );
     const node = (await nodeOf(figmaCtx, id, 'bind_component_property')) as Referencing;
     const main = node.type === 'INSTANCE' ? await node.getMainComponentAsync() : null;
     const state: BindPropertyState = {
@@ -1959,7 +2073,102 @@ const variableModeInverse: BatchInverse = {
   touches: (_params, captured) => [(captured as VariableModeState).id],
 };
 
+/** Markdown is the rich source; restoring plain text afterwards would flatten it. */
+const componentDocumentationInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const node = await nodeOf(
+      figmaCtx,
+      stringParam(params, 'componentId', 'update_component'),
+      'update_component',
+    );
+    if (node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET')
+      throw new Error('batch/update_component: expected a component or set');
+    return {
+      id: node.id,
+      markdown: node.descriptionMarkdown,
+      links: node.documentationLinks.map(link => ({ uri: link.uri })),
+    };
+  },
+  async undo(figmaCtx, params, captured) {
+    const s = captured as { id: string; markdown: string; links: DocumentationLink[] };
+    const node = await live(figmaCtx, s.id);
+    if (node?.type !== 'COMPONENT' && node?.type !== 'COMPONENT_SET') return undefined;
+    const p = paramsOf(params);
+    if (p.description !== undefined || p.descriptionMarkdown !== undefined)
+      node.descriptionMarkdown = s.markdown;
+    if (p.documentationLinks !== undefined) node.documentationLinks = s.links;
+    return undefined;
+  },
+};
+
+const createSlotInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const node = await nodeOf(
+      figmaCtx,
+      stringParam(params, 'componentId', 'create_slot'),
+      'create_slot',
+    );
+    if (node.type !== 'COMPONENT') throw new Error('batch/create_slot: expected a main COMPONENT');
+    return null;
+  },
+  async undo(figmaCtx, _params, _captured, result) {
+    const s = result as { nodeId: string; propertyId?: string };
+    const node = await live(figmaCtx, s.nodeId);
+    node?.remove();
+    if (s.propertyId !== undefined) await removeProperty(figmaCtx, s.propertyId, result);
+    return undefined;
+  },
+  resizes: params => [stringParam(params, 'componentId', 'create_slot')],
+};
+
+/** Restore the entire sibling order, so several reorders captured before apply unwind correctly. */
+const styleOrderInverse = (folders: boolean): BatchInverse => ({
+  async capture(figmaCtx, params) {
+    const p = paramsOf(params);
+    const kind = p.kind as StyleKind;
+    const styles = await styleOrderApi(figmaCtx, kind).list();
+    if (folders) {
+      const folder = stringParam(params, 'folder', 'reorder_style_folders');
+      return { kind, order: siblingFolders(styles, styleFolder(folder)) };
+    }
+    const target = styles.find(style => style.id === p.styleId);
+    if (target === undefined) throw new Error('batch/reorder_styles: local style not found');
+    return {
+      kind,
+      order: styles
+        .filter(style => styleFolder(style.name) === styleFolder(target.name))
+        .map(style => style.id),
+    };
+  },
+  async undo(figmaCtx, _params, captured) {
+    const s = captured as { kind: StyleKind; order: string[] };
+    const api = styleOrderApi(figmaCtx, s.kind);
+    if (folders) {
+      let previous: string | null = null;
+      for (const folder of s.order) {
+        api.moveFolder(folder, previous);
+        previous = folder;
+      }
+    } else {
+      const styles = await api.list();
+      let previous: BaseStyle | null = null;
+      for (const id of s.order) {
+        const style = styles.find(item => item.id === id);
+        if (style === undefined)
+          throw new Error(`batch/reorder_styles: style ${id} disappeared during rollback`);
+        api.move(style, previous);
+        previous = style;
+      }
+    }
+    return undefined;
+  },
+});
+
 const INVERSES: Readonly<Record<string, BatchInverse>> = {
+  update_component: componentDocumentationInverse,
+  create_slot: createSlotInverse,
+  reorder_styles: styleOrderInverse(false),
+  reorder_style_folders: styleOrderInverse(true),
   // Single-node properties. Snapshot every field the handler can write, not just the headline one,
   // plus the bindings a write drops. Order matters where a uniform value precedes per-side/corner
   // values it would otherwise overwrite (mirrors the handlers).
@@ -1985,6 +2194,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // Layout.
   set_auto_layout: autoLayoutInverse,
   set_layout_props: layoutPropsInverse,
+  set_grid_child: gridChildInverse,
   // Styles and bindings on nodes.
   apply_style_to_node: applyStyleInverse,
   bind_variable_to_node: bindToNodeInverse,
@@ -2090,6 +2300,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_variable_value: variableValueInverse,
   set_variable_code_syntax: codeSyntaxInverse,
   rename_variable: renameVariableInverse,
+  update_variable: updateVariableInverse,
   update_variable_collection: updateVariableCollectionInverse,
   // Component properties.
   edit_component_property: editPropertyInverse,
@@ -2112,6 +2323,11 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
  * either side without someone deciding which, and saying why when it is this one.
  */
 export const NON_BATCHABLE: Readonly<Record<string, string>> = {
+  reorder_grid_tracks:
+    'reordering tracks also moves any track a multi-track child spans, so a rollback cannot guarantee restoring those children; call reorder_grid_tracks on its own, outside the batch',
+  reset_slot: 'resetting slot content can delete children whose original ids cannot be restored',
+  reset_overrides:
+    'resetting overrides can replace swapped or slot subtrees whose original ids cannot be faithfully restored',
   import_variable:
     'a library import has no faithful inverse; import the variable before the batch and use its returned variableId',
   import_style:

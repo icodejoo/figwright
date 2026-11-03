@@ -3,6 +3,14 @@ import { z } from 'zod';
 import { fontNameSchema } from './font-name-schema.js';
 import { paintItemSchema } from './paint-schema.js';
 import type { ToolSpec } from './spec.js';
+import {
+  listSpacingSchema,
+  textDecorationColorSchema,
+  textDecorationOffsetSchema,
+  textDecorationSkipInkSchema,
+  textDecorationStyleSchema,
+  textDecorationThicknessSchema,
+} from './text-detail-schema.js';
 
 export const SET_TEXT_RANGE_TOOL_NAME = 'set_text_range';
 
@@ -20,6 +28,24 @@ const rangeSchema = z.object({
     .optional()
     .describe('Run colour (SOLID or gradient), like set_fills'),
   textDecoration: z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']).optional(),
+  textDecorationStyle: textDecorationStyleSchema.optional(),
+  textDecorationOffset: textDecorationOffsetSchema.optional(),
+  textDecorationThickness: textDecorationThicknessSchema.optional(),
+  textDecorationColor: textDecorationColorSchema.optional(),
+  textDecorationSkipInk: textDecorationSkipInkSchema.optional(),
+  paragraphSpacing: z
+    .number()
+    .min(0)
+    .optional()
+    .describe(
+      'Space after each paragraph in px. Paragraph-scoped: applies to every paragraph the range touches',
+    ),
+  paragraphIndent: z
+    .number()
+    .min(0)
+    .optional()
+    .describe('First-line indent in px. Paragraph-scoped, like paragraphSpacing'),
+  listSpacing: listSpacingSchema.optional(),
   textCase: z
     .enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE', 'SMALL_CAPS', 'SMALL_CAPS_FORCED'])
     .optional(),
@@ -65,13 +91,17 @@ export const setTextRangeTool: ToolSpec = {
     'inline rich text (a link inside a sentence, a bold word, a coloured span, a bulleted list, a ' +
     "smaller /mo after a price). Each range gives start/end (char offsets into the node's characters) " +
     'plus any subset of run properties: fontName / fontSize / fills / textDecoration / textCase / ' +
-    'lineHeight / letterSpacing / hyperlink / listOptions / indentation / textWrapStyle, and design-system bindings ' +
+    'lineHeight / letterSpacing / hyperlink / listOptions / indentation / textWrapStyle / ' +
+    'paragraphSpacing / paragraphIndent / listSpacing, the decoration details of an underline ' +
+    '(textDecorationStyle / Offset / Thickness / Color / SkipInk — on a run that is underlined or ' +
+    'struck through), and design-system bindings ' +
     'textStyleId / fillStyleId / boundVariables. Ranges apply in order (a later range overrides an ' +
     'earlier one on overlap). Fonts are loaded automatically. Set the whole node first with create_text ' +
     '/ set_text; use set_text_properties for node-level typography & overflow. Text on a path ' +
     '(TEXT_PATH) takes the run fields it draws — fontName, fontSize, fills, textCase, ' +
-    'letterSpacing, hyperlink and the bindings — and refuses decoration, lineHeight, lists and ' +
-    'textWrapStyle. Returns { ok, nodeId }.',
+    'letterSpacing, hyperlink and the bindings — and refuses decoration, lineHeight, lists, ' +
+    'paragraph fields and textWrapStyle. OpenType features have no setter in the Figma API and ' +
+    'are read-only (get_node reports them). Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('TEXT node id whose ranges to style'),
     ranges: z.array(rangeSchema).describe('Character ranges + the run properties to apply to each'),

@@ -1,6 +1,7 @@
 import type { ComponentPropertyApiEntry, GetComponentApiResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { componentDocumentation } from './component-documentation.js';
 
 /**
  * Resolve a node to the one that owns the full property contract: a COMPONENT_SET as-is, a
@@ -55,10 +56,14 @@ export const createGetComponentApiHandler =
       if (typeof def.description === 'string' && def.description !== '') {
         entry.description = def.description;
       }
+      if (def.slotSettings !== undefined && Object.keys(def.slotSettings).length > 0) {
+        entry.slotSettings = { ...def.slotSettings };
+      }
       properties[name] = entry;
     }
 
     const result: GetComponentApiResult = {
+      ...componentDocumentation(target),
       id: target.id,
       name: target.name,
       type: target.type,

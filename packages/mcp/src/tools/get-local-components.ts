@@ -11,7 +11,7 @@ export const getLocalComponentsTool: ToolSpec = {
     '{ components, componentSets }. Scans a subtree, not the whole document — pass nodeId, or select ' +
     'the frames to scan. A document root is not supported; use get_pages and scan each page by nodeId. ' +
     'Components carry their variantProperties (when part of a set); component sets ' +
-    'carry their variantGroupProperties (available values per axis) and the ids of their variant components.',
+    'carry their variantGroupProperties (available values per axis) and the ids of their variant components. Nonempty documentationLinks and descriptionMarkdown (only when it differs from description) are included for components and sets; update_component edits their documentation. To find references, use get_component_instances instead of scanning all pages for instances.',
   inputSchema: z.object({
     nodeId: z
       .string()

@@ -11,7 +11,7 @@ export const getComponentApiTool: ToolSpec = {
     'COMPONENT, COMPONENT_SET, or INSTANCE id (an instance resolves to its main component / set). ' +
     'Returns { id, name, type, properties } where properties maps each property name to ' +
     '{ type (VARIANT|BOOLEAN|TEXT|INSTANCE_SWAP|SLOT), defaultValue, variantOptions?, preferredValues?, ' +
-    'description? }. Property names come back verbatim for set_instance_properties: VARIANT by bare name ' +
+    'description?, slotSettings? }. Nonempty component description, documentationLinks and (only when it differs from description) descriptionMarkdown are included. SLOT content is edited as child nodes, never via set_instance_properties; slotContentId identifies its property binding. Property names come back verbatim for set_instance_properties: VARIANT by bare name ' +
     '(e.g. "Size"), BOOLEAN/TEXT/INSTANCE_SWAP suffixed with #id (e.g. "Label#2:0"). Unlike ' +
     'get_local_components (a subtree inventory), this targets one component and is safe on large files.',
   inputSchema: z.object({

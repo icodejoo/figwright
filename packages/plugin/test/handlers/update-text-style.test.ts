@@ -188,3 +188,45 @@ describe('update_text_style handler', () => {
     expect(bound).toEqual([]);
   });
 });
+
+describe('update_text_style typography beyond font and size', () => {
+  it('updates only the given fields and leaves the rest', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Label',
+      fontName: { family: 'Inter', style: 'Regular' },
+      textCase: 'ORIGINAL',
+      paragraphSpacing: 2,
+      hangingList: false,
+    };
+    const { figma: f } = fakeFigma(style);
+    await createUpdateTextStyleHandler(f)({
+      styleId: 'S:0',
+      textCase: 'SMALL_CAPS',
+      leadingTrim: 'CAP_HEIGHT',
+      hangingList: true,
+    });
+    expect(style).toMatchObject({
+      textCase: 'SMALL_CAPS',
+      leadingTrim: 'CAP_HEIGHT',
+      hangingList: true,
+      paragraphSpacing: 2,
+    });
+  });
+
+  it('refuses a mistyped field before touching the style', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Label',
+      fontName: { family: 'Inter', style: 'Regular' },
+      textCase: 'ORIGINAL',
+    };
+    const { figma: f } = fakeFigma(style);
+    await expect(
+      createUpdateTextStyleHandler(f)({ styleId: 'S:0', name: 'Renamed', textDecoration: 7 }),
+    ).rejects.toThrow(/textDecoration must be a string/);
+    expect(style.name).toBe('Label');
+  });
+});

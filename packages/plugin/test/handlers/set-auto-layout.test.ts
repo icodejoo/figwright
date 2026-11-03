@@ -336,3 +336,131 @@ describe('set_auto_layout — GRID placement modes', () => {
     expect(node.paddingTop).toBe(0);
   });
 });
+
+describe('set_auto_layout grid track sizes', () => {
+  const makeGridFrame = () => ({
+    ...makeFrame(),
+    gridRowSizes: [] as unknown[],
+    gridColumnSizes: [] as unknown[],
+  });
+
+  it('writes row and column sizes after the counts they are sized against', async () => {
+    const node = makeGridFrame();
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await handler({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      gridRowCount: 2,
+      gridColumnCount: 3,
+      gridRowSizes: [{ type: 'FIXED', value: 80 }, { type: 'HUG' }],
+      gridColumnSizes: [
+        { type: 'FLEX', value: 2 },
+        { type: 'FLEX' },
+        { type: 'FIXED', value: 120 },
+      ],
+    });
+    expect(node.gridRowSizes).toEqual([{ type: 'FIXED', value: 80 }, { type: 'HUG' }]);
+    // A FLEX track without a value is passed on without one, so Figma picks its own default.
+    expect(node.gridColumnSizes).toEqual([
+      { type: 'FLEX', value: 2 },
+      { type: 'FLEX' },
+      { type: 'FIXED', value: 120 },
+    ]);
+  });
+
+  it('checks the length against the count the grid already has', async () => {
+    const node = makeGridFrame();
+    node.layoutMode = 'GRID';
+    node.gridRowCount = 2;
+    node.gridColumnCount = 2;
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await handler({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      gridColumnSizes: [{ type: 'FLEX' }, { type: 'FIXED', value: 40 }],
+    });
+    expect(node.gridColumnSizes).toHaveLength(2);
+
+    await expect(
+      handler({ nodeId: '1:1', layoutMode: 'GRID', gridRowSizes: [{ type: 'HUG' }] }),
+    ).rejects.toThrow(/gridRowSizes has 1 tracks but the grid will have 2/);
+  });
+
+  it('refuses a wrong-length array before writing anything', async () => {
+    const node = makeGridFrame();
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await expect(
+      handler({
+        nodeId: '1:1',
+        layoutMode: 'GRID',
+        paddingTop: 12,
+        gridColumnCount: 3,
+        gridColumnSizes: [{ type: 'FLEX' }],
+      }),
+    ).rejects.toThrow(/gridColumnSizes has 1 tracks but the grid will have 3/);
+    expect(node.layoutMode).toBe('NONE');
+    expect(node.paddingTop).toBe(0);
+  });
+
+  it('does not judge row sizes while Figma owns the row count (gridAutoTracks ROWS)', async () => {
+    const node = makeGridFrame();
+    node.layoutMode = 'GRID';
+    (node as Record<string, unknown>).gridAutoTracks = 'ROWS';
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await handler({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      gridRowSizes: [{ type: 'HUG' }, { type: 'HUG' }, { type: 'HUG' }],
+    });
+    expect(node.gridRowSizes).toHaveLength(3);
+  });
+
+  it('rejects malformed tracks', async () => {
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': makeGridFrame() }));
+    const run = (gridRowSizes: unknown) =>
+      handler({ nodeId: '1:1', layoutMode: 'GRID', gridRowCount: 1, gridRowSizes });
+    await expect(run([{ type: 'FIXED' }])).rejects.toThrow(/is FIXED, so it needs a value/);
+    await expect(run([{ type: 'HUG', value: 4 }])).rejects.toThrow(/HUG, which takes no value/);
+    await expect(run([{ type: 'FLEX', value: 0 }])).rejects.toThrow(/positive number/);
+    await expect(run([{ type: 'AUTO' }])).rejects.toThrow(/FLEX \/ FIXED \/ HUG/);
+    await expect(run([])).rejects.toThrow(/non-empty array/);
+  });
+
+  it('refuses track sizes on a flex layout and on layoutMode NONE, writing nothing', async () => {
+    const node = makeGridFrame();
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await expect(
+      handler({ nodeId: '1:1', layoutMode: 'HORIZONTAL', gridRowSizes: [{ type: 'HUG' }] }),
+    ).rejects.toThrow(/GRID only/);
+    await expect(
+      handler({ nodeId: '1:1', layoutMode: 'NONE', gridRowSizes: [{ type: 'HUG' }] }),
+    ).rejects.toThrow(/GRID only.*layoutMode NONE has no tracks/);
+    expect(node.gridRowSizes).toEqual([]);
+    expect(node.layoutMode).toBe('NONE');
+  });
+
+  it('explains a Figma-side length failure that came after the switch to GRID', async () => {
+    const node = makeGridFrame();
+    Object.defineProperty(node, 'gridRowSizes', {
+      get: () => [],
+      set: () => {
+        throw new Error('wrong length');
+      },
+    });
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    // Not a grid yet and no gridRowCount: the length cannot be checked up front.
+    await expect(
+      handler({ nodeId: '1:1', layoutMode: 'GRID', gridRowSizes: [{ type: 'HUG' }] }),
+    ).rejects.toThrow(
+      /Figma refused the track sizes \(wrong length\).*may already have switched to GRID/,
+    );
+    expect(node.layoutMode).toBe('GRID');
+
+    // With a count in the call the same mistake is caught before the write, with the plain message.
+    const checked = makeGridFrame();
+    const h2 = createSetAutoLayoutHandler(fakeFigma({ '1:1': checked }));
+    await expect(
+      h2({ nodeId: '1:1', layoutMode: 'GRID', gridRowCount: 2, gridRowSizes: [{ type: 'HUG' }] }),
+    ).rejects.toThrow(/gridRowSizes has 1 tracks but the grid will have 2/);
+  });
+});

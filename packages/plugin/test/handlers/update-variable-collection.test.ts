@@ -145,3 +145,26 @@ describe('update_variable_collection handler', () => {
     ).rejects.toThrow(/not found/);
   });
 });
+
+describe('update_variable_collection hiddenFromPublishing', () => {
+  it('sets the flag and reports it back', async () => {
+    const collection = { ...makeCollection(), hiddenFromPublishing: false };
+    const handler = createUpdateVariableCollectionHandler(fakeFigma(collection));
+    const result = (await handler({
+      collectionId: 'VC:0',
+      hiddenFromPublishing: true,
+    })) as UpdateCollectionResult;
+    expect(collection.hiddenFromPublishing).toBe(true);
+    expect(result.hiddenFromPublishing).toBe(true);
+    expect(collection.renameMode).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-boolean flag before writing', async () => {
+    const collection = { ...makeCollection(), hiddenFromPublishing: false };
+    const handler = createUpdateVariableCollectionHandler(fakeFigma(collection));
+    await expect(
+      handler({ collectionId: 'VC:0', name: 'X', hiddenFromPublishing: 'yes' }),
+    ).rejects.toThrow(/boolean/);
+    expect(collection.name).toBe('Colour');
+  });
+});

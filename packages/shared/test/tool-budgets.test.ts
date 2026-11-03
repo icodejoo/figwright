@@ -34,6 +34,9 @@ describe('tool budgets', () => {
       'scan_nodes_by_types',
       'scan_text_nodes',
       'get_local_components',
+      'get_component_instances',
+      'get_style_consumers',
+      'reset_overrides',
       // A library import can wait on Figma's throttled timers in a background file.
       'import_variable',
       'import_style',
@@ -55,6 +58,9 @@ describe('tool budgets', () => {
       'scan_nodes_by_types',
       'scan_text_nodes',
       'get_local_components',
+      'get_component_instances',
+      'get_style_consumers',
+      'reset_overrides',
     ]) {
       expect(getRelayBudget(t)).toBe(getToolBudget(t) + BUDGET_LAYER_MARGIN_MS);
       expect(getFollowerBudget(t)).toBe(getToolBudget(t) + 2 * BUDGET_LAYER_MARGIN_MS);

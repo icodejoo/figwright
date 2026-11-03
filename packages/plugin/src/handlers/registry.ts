@@ -27,6 +27,7 @@ import { createCreatePaintStyleHandler } from './create-paint-style.js';
 import { createCreateRectangleHandler } from './create-rectangle.js';
 import { createCreateSectionHandler } from './create-section.js';
 import { createCreateShapeHandler } from './create-shape.js';
+import { createCreateSlotHandler } from './create-slot.js';
 import { createCreateTextStyleHandler } from './create-text-style.js';
 import { createCreateTextHandler } from './create-text.js';
 import { createCreateVariableCollectionHandler } from './create-variable-collection.js';
@@ -47,6 +48,7 @@ import { createFlattenNodesHandler } from './flatten-nodes.js';
 import { createFlipNodesHandler } from './flip-nodes.js';
 import { createGetAnnotationsHandler } from './get-annotations.js';
 import { createGetComponentApiHandler } from './get-component-api.js';
+import { createGetComponentInstancesHandler } from './get-component-instances.js';
 import { createGetDesignContextHandler } from './get-design-context.js';
 import { createGetDocumentHandler } from './get-document.js';
 import { createGetFontsHandler } from './get-fonts.js';
@@ -61,6 +63,7 @@ import { createGetPagesHandler } from './get-pages.js';
 import { createGetReactionsHandler } from './get-reactions.js';
 import { createGetScreenshotHandler } from './get-screenshot.js';
 import { createGetSelectionHandler } from './get-selection.js';
+import { createGetStyleConsumersHandler } from './get-style-consumers.js';
 import { createGetStylesHandler } from './get-styles.js';
 import { createGetVariableDefsHandler } from './get-variable-defs.js';
 import { createGetViewportHandler } from './get-viewport.js';
@@ -80,9 +83,14 @@ import { createRemoveReactionsHandler } from './remove-reactions.js';
 import { createRenameNodeHandler } from './rename-node.js';
 import { createRenamePageHandler } from './rename-page.js';
 import { createRenameVariableHandler } from './rename-variable.js';
+import { createReorderGridTracksHandler } from './reorder-grid-tracks.js';
 import { createReorderNodesHandler } from './reorder-nodes.js';
+import { createReorderStyleFoldersHandler } from './reorder-style-folders.js';
+import { createReorderStylesHandler } from './reorder-styles.js';
 import { createReparentNodesHandler } from './reparent-nodes.js';
 import { createRepeatNodesHandler, createSetRepeatHandler } from './repeat.js';
+import { createResetOverridesHandler } from './reset-overrides.js';
+import { createResetSlotHandler } from './reset-slot.js';
 import { createResizeNodesHandler } from './resize-nodes.js';
 import { createRotateNodesHandler } from './rotate-nodes.js';
 import { createSaveImageFillsHandler } from './save-image-fills.js';
@@ -96,6 +104,7 @@ import { createSetConstraintsHandler } from './set-constraints.js';
 import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
 import { createSetFillsHandler } from './set-fills.js';
+import { createSetGridChildHandler } from './set-grid-child.js';
 import { createSetImageFillHandler } from './set-image-fill.js';
 import { createSetInstancePropertiesHandler } from './set-instance-properties.js';
 import { createSetLayoutGridsHandler } from './set-layout-grids.js';
@@ -116,11 +125,13 @@ import { createSetVisibleHandler } from './set-visible.js';
 import { createSwapComponentHandler } from './swap-component.js';
 import { createCreateTextPathHandler, createSetTextPathHandler } from './text-path.js';
 import { createUngroupNodesHandler } from './ungroup-nodes.js';
+import { createUpdateComponentHandler } from './update-component.js';
 import { createUpdateEffectStyleHandler } from './update-effect-style.js';
 import { createUpdateFlowsHandler } from './update-flows.js';
 import { createUpdatePaintStyleHandler } from './update-paint-style.js';
 import { createUpdateTextStyleHandler } from './update-text-style.js';
 import { createUpdateVariableCollectionHandler } from './update-variable-collection.js';
+import { createUpdateVariableHandler } from './update-variable.js';
 import {
   createCreateVectorHandler,
   createGetVectorHandler,
@@ -144,6 +155,12 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     set_fills: createSetFillsHandler(figmaCtx),
     set_text: createSetTextHandler(figmaCtx),
     set_text_properties: createSetTextPropertiesHandler(figmaCtx),
+    update_component: createUpdateComponentHandler(figmaCtx),
+    create_slot: createCreateSlotHandler(figmaCtx),
+    reset_slot: createResetSlotHandler(figmaCtx),
+    reset_overrides: createResetOverridesHandler(figmaCtx),
+    reorder_styles: createReorderStylesHandler(figmaCtx),
+    reorder_style_folders: createReorderStyleFoldersHandler(figmaCtx),
     set_text_range: createSetTextRangeHandler(figmaCtx),
     create_frame: createCreateFrameHandler(figmaCtx),
     set_opacity: createSetOpacityHandler(figmaCtx),
@@ -161,6 +178,8 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     flatten_nodes: createFlattenNodesHandler(figmaCtx),
     resize_nodes: createResizeNodesHandler(figmaCtx),
     set_auto_layout: createSetAutoLayoutHandler(figmaCtx),
+    set_grid_child: createSetGridChildHandler(figmaCtx),
+    reorder_grid_tracks: createReorderGridTracksHandler(figmaCtx),
     set_layout_props: createSetLayoutPropsHandler(figmaCtx),
     set_layout_grids: createSetLayoutGridsHandler(figmaCtx),
     set_position: createSetPositionHandler(figmaCtx),
@@ -205,6 +224,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     import_variable: createImportVariableHandler(figmaCtx),
     set_node_variable_mode: createSetNodeVariableModeHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
+    update_variable: createUpdateVariableHandler(figmaCtx),
     set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
     delete_variable_mode: createDeleteVariableModeHandler(figmaCtx),
@@ -249,6 +269,8 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
   };
 
   const handlers: SandboxHandlers = {
+    get_component_instances: createGetComponentInstancesHandler(figmaCtx),
+    get_style_consumers: createGetStyleConsumersHandler(figmaCtx),
     ping: createPingHandler(figmaCtx),
     get_selection: createGetSelectionHandler(figmaCtx),
     get_document: createGetDocumentHandler(figmaCtx),

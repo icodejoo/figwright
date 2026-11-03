@@ -12,11 +12,11 @@ export const bindComponentPropertyTool: ToolSpec = {
     'TEXT node), "mainComponent" for an INSTANCE_SWAP (the node must be an INSTANCE). The same ' +
     'property can be bound to several layers (call once per layer). Pass propertyId: null to remove ' +
     "the binding on that field. The property's type must match the field and it must exist on the " +
-    'containing component. Returns { ok, nodeId }.',
+    'containing component. SLOT uses field slotContentId on a FRAME (converts it to a Slot) or SLOT; this conversion is not batchable. Slot availability depends on plan and editor; API failure reasons are returned unchanged. 可用性取决于套餐与编辑器，失败原因会原样返回。 Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Sublayer inside the component to bind on'),
     field: z
-      .enum(['visible', 'characters', 'mainComponent'])
+      .enum(['visible', 'characters', 'mainComponent', 'slotContentId'])
       .describe('Which layer field the property drives'),
     propertyId: z
       .string()

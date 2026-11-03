@@ -32,6 +32,7 @@ import { createPaintStyleTool } from './create-paint-style.js';
 import { createRectangleTool } from './create-rectangle.js';
 import { createSectionTool } from './create-section.js';
 import { createShapeTool } from './create-shape.js';
+import { createSlotTool } from './create-slot.js';
 import { createTextPathTool } from './create-text-path.js';
 import { createTextStyleTool } from './create-text-style.js';
 import { createTextTool } from './create-text.js';
@@ -55,6 +56,7 @@ import { flattenNodesTool } from './flatten-nodes.js';
 import { flipNodesTool } from './flip-nodes.js';
 import { getAnnotationsTool } from './get-annotations.js';
 import { getComponentApiTool } from './get-component-api.js';
+import { getComponentInstancesTool } from './get-component-instances.js';
 import { getDesignContextTool } from './get-design-context.js';
 import { getDocumentTool } from './get-document.js';
 import { getFontsTool } from './get-fonts.js';
@@ -69,6 +71,7 @@ import { getPagesTool } from './get-pages.js';
 import { getReactionsTool } from './get-reactions.js';
 import { getScreenshotTool } from './get-screenshot.js';
 import { getSelectionTool } from './get-selection.js';
+import { getStyleConsumersTool } from './get-style-consumers.js';
 import { getStylesTool } from './get-styles.js';
 import { getVariableDefsTool } from './get-variable-defs.js';
 import { getVectorTool } from './get-vector.js';
@@ -91,9 +94,14 @@ import { removeReactionsTool } from './remove-reactions.js';
 import { renameNodeTool } from './rename-node.js';
 import { renamePageTool } from './rename-page.js';
 import { renameVariableTool } from './rename-variable.js';
+import { reorderGridTracksTool } from './reorder-grid-tracks.js';
 import { reorderNodesTool } from './reorder-nodes.js';
+import { reorderStyleFoldersTool } from './reorder-style-folders.js';
+import { reorderStylesTool } from './reorder-styles.js';
 import { reparentNodesTool } from './reparent-nodes.js';
 import { repeatNodesTool } from './repeat-nodes.js';
+import { resetOverridesTool } from './reset-overrides.js';
+import { resetSlotTool } from './reset-slot.js';
 import { resizeNodesTool } from './resize-nodes.js';
 import { rotateNodesTool } from './rotate-nodes.js';
 import { saveImageFillsTool } from './save-image-fills.js';
@@ -110,6 +118,7 @@ import { setConstraintsTool } from './set-constraints.js';
 import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
 import { setFillsTool } from './set-fills.js';
+import { setGridChildTool } from './set-grid-child.js';
 import { setImageFillTool } from './set-image-fill.js';
 import { setInstancePropertiesTool } from './set-instance-properties.js';
 import { setLayoutGridsTool } from './set-layout-grids.js';
@@ -135,11 +144,13 @@ import { swapComponentTool } from './swap-component.js';
 import { tokenMapTool } from './token-map.js';
 import { ungroupNodesTool } from './ungroup-nodes.js';
 import { unlockNodesTool } from './unlock-nodes.js';
+import { updateComponentTool } from './update-component.js';
 import { updateEffectStyleTool } from './update-effect-style.js';
 import { updateFlowsTool } from './update-flows.js';
 import { updatePaintStyleTool } from './update-paint-style.js';
 import { updateTextStyleTool } from './update-text-style.js';
 import { updateVariableCollectionTool } from './update-variable-collection.js';
+import { updateVariableTool } from './update-variable.js';
 import { useFileTool } from './use-file.js';
 
 /**
@@ -165,6 +176,8 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   getVariableDefsTool,
   getLocalComponentsTool,
   getComponentApiTool,
+  getComponentInstancesTool,
+  getStyleConsumersTool,
   getViewportTool,
   getFontsTool,
   getAnnotationsTool,
@@ -220,6 +233,8 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   setPositionTool,
   resizeNodesTool,
   setAutoLayoutTool,
+  setGridChildTool,
+  reorderGridTracksTool,
   setLayoutPropsTool,
   setLayoutGridsTool,
   setBlendModeTool,
@@ -239,6 +254,8 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   updatePaintStyleTool,
   updateTextStyleTool,
   updateEffectStyleTool,
+  reorderStylesTool,
+  reorderStyleFoldersTool,
   applyStyleToNodeTool,
   importStyleTool,
   deleteStyleTool,
@@ -252,6 +269,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   importVariableTool,
   setNodeVariableModeTool,
   renameVariableTool,
+  updateVariableTool,
   setVariableCodeSyntaxTool,
   deleteVariableTool,
   deleteVariableModeTool,
@@ -270,6 +288,10 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   removeReactionsTool,
   updateFlowsTool,
   swapComponentTool,
+  resetOverridesTool,
+  updateComponentTool,
+  createSlotTool,
+  resetSlotTool,
   setInstancePropertiesTool,
   addComponentPropertyTool,
   bindComponentPropertyTool,

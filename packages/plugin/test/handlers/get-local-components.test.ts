@@ -53,6 +53,24 @@ const variant = {
 };
 
 describe('get_local_components handler', () => {
+  it('reads nonempty rich documentation on components and component sets', async () => {
+    const docs = {
+      descriptionMarkdown: '**Usage**',
+      documentationLinks: [{ uri: 'https://example.com' }],
+    };
+    const result = (await createGetLocalComponentsHandler(
+      fakeFigma({
+        selection: [
+          frame('F', [
+            { ...set, ...docs },
+            { ...standalone, ...docs },
+          ]),
+        ],
+      }),
+    )({})) as GetLocalComponentsResult;
+    expect(result.components[0]).toMatchObject(docs);
+    expect(result.componentSets[0]).toMatchObject(docs);
+  });
   it('splits components and component sets within the selection subtree, with variant metadata', async () => {
     const handler = createGetLocalComponentsHandler(
       fakeFigma({ selection: [frame('F:1', [set, standalone, variant])] }),

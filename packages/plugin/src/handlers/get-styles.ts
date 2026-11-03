@@ -120,6 +120,28 @@ export const createGetStylesHandler =
           letterSpacing: { unit: s.letterSpacing.unit, value: s.letterSpacing.value },
           textWrapStyle: s.textWrapStyle,
         };
+        // The rest of the TextStyle typography, only off its default so an ordinary style is
+        // unchanged. Read through `in`-less property access: a style from an older editor simply
+        // lacks the field.
+        if (s.textCase !== 'ORIGINAL' && typeof s.textCase === 'string')
+          style.textCase = s.textCase;
+        if (s.textDecoration !== 'NONE' && typeof s.textDecoration === 'string') {
+          style.textDecoration = s.textDecoration;
+        }
+        if (s.leadingTrim !== 'NONE' && typeof s.leadingTrim === 'string') {
+          style.leadingTrim = s.leadingTrim;
+        }
+        if (typeof s.paragraphIndent === 'number' && s.paragraphIndent !== 0) {
+          style.paragraphIndent = s.paragraphIndent;
+        }
+        if (typeof s.paragraphSpacing === 'number' && s.paragraphSpacing !== 0) {
+          style.paragraphSpacing = s.paragraphSpacing;
+        }
+        if (typeof s.listSpacing === 'number' && s.listSpacing !== 0) {
+          style.listSpacing = s.listSpacing;
+        }
+        if (s.hangingPunctuation === true) style.hangingPunctuation = true;
+        if (s.hangingList === true) style.hangingList = true;
         // Typography values are scalars, so a text style is the only place its bindings can live —
         // unlike a paint / effect / grid style, where they sit on the individual object.
         const bound = collectBindings(s.boundVariables);

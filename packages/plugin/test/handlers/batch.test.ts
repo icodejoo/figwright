@@ -26,12 +26,14 @@ import { createNavigateToPageHandler } from '../../src/handlers/navigate-to-page
 import { createRemoveReactionsHandler } from '../../src/handlers/remove-reactions.js';
 import { createRenameNodeHandler } from '../../src/handlers/rename-node.js';
 import { createRenameVariableHandler } from '../../src/handlers/rename-variable.js';
+import { createReorderGridTracksHandler } from '../../src/handlers/reorder-grid-tracks.js';
 import { createReorderNodesHandler } from '../../src/handlers/reorder-nodes.js';
 import { createReparentNodesHandler } from '../../src/handlers/reparent-nodes.js';
 import { createRepeatNodesHandler, createSetRepeatHandler } from '../../src/handlers/repeat.js';
 import { createSetAutoLayoutHandler } from '../../src/handlers/set-auto-layout.js';
 import { createSetCornerRadiusHandler } from '../../src/handlers/set-corner-radius.js';
 import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
+import { createSetGridChildHandler } from '../../src/handlers/set-grid-child.js';
 import { createSetInstancePropertiesHandler } from '../../src/handlers/set-instance-properties.js';
 import { createSetOpacityHandler } from '../../src/handlers/set-opacity.js';
 import { createSetPositionHandler } from '../../src/handlers/set-position.js';
@@ -49,6 +51,7 @@ import { createUpdateFlowsHandler } from '../../src/handlers/update-flows.js';
 import { createUpdatePaintStyleHandler } from '../../src/handlers/update-paint-style.js';
 import { createUpdateTextStyleHandler } from '../../src/handlers/update-text-style.js';
 import { createUpdateVariableCollectionHandler } from '../../src/handlers/update-variable-collection.js';
+import { createUpdateVariableHandler } from '../../src/handlers/update-variable.js';
 import {
   createCreateVectorHandler,
   createOutlineStrokeHandler,
@@ -2844,5 +2847,172 @@ describe('batch inverse for flip_nodes', () => {
       [0, 1, 50],
       [-1, 0, 80],
     ]);
+  });
+});
+
+// ── Grid placement, grid tracks and variable metadata ────────────────────────
+
+describe('batch: grid child, grid tracks and variable metadata', () => {
+  it('puts a grid child back in its cell, with its span and alignment', async () => {
+    const { node, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null);
+    node('F', 'RECTANGLE', page, { fills: [] });
+    const grid = node('G', 'FRAME', page, { layoutMode: 'GRID', gridItemsPositioning: 'MANUAL' });
+    const state = { row: 0, column: 0, rowSpan: 1, columnSpan: 1 };
+    const kid = node('K', 'RECTANGLE', grid, {
+      gridChildHorizontalAlign: 'AUTO',
+      gridChildVerticalAlign: 'AUTO',
+      setGridChildPosition: (r: number, c: number) => {
+        state.row = r;
+        state.column = c;
+      },
+    });
+    for (const [key, field] of [
+      ['gridRowAnchorIndex', 'row'],
+      ['gridColumnAnchorIndex', 'column'],
+      ['gridRowSpan', 'rowSpan'],
+      ['gridColumnSpan', 'columnSpan'],
+    ] as const) {
+      Object.defineProperty(kid, key, {
+        get: () => state[field],
+        set: (v: number) => {
+          state[field] = v;
+        },
+        enumerable: true,
+      });
+    }
+    const handler = createBatchHandler(figmaCtx, {
+      set_grid_child: createSetGridChildHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_grid_child',
+            params: {
+              nodeId: 'K',
+              rowAnchorIndex: 2,
+              columnAnchorIndex: 1,
+              columnSpan: 2,
+              horizontalAlign: 'MAX',
+            },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(state).toEqual({ row: 0, column: 0, rowSpan: 1, columnSpan: 1 });
+    expect(kid.gridChildHorizontalAlign).toBe('AUTO');
+  });
+
+  it('refuses a set_grid_child op on a node outside a grid, before anything runs', async () => {
+    const { node, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null);
+    node('F', 'RECTANGLE', page, { fills: [] });
+    node('K', 'RECTANGLE', page);
+    const handler = createBatchHandler(figmaCtx, {
+      set_grid_child: createSetGridChildHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({ ops: [{ tool: 'set_grid_child', params: { nodeId: 'K', rowSpan: 2 } }, FAIL] }),
+    ).rejects.toThrow(/not a direct child of a GRID frame/);
+  });
+
+  it('rejects reorder_grid_tracks at validate time, naming the rollback gap and the alternative', async () => {
+    const { node, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null);
+    const reorderRows = vi.fn<() => void>();
+    node('G', 'FRAME', page, { layoutMode: 'GRID', gridRowCount: 3, reorderRows });
+    const handler = createBatchHandler(figmaCtx, {
+      reorder_grid_tracks: createReorderGridTracksHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'reorder_grid_tracks',
+            params: { nodeId: 'G', axis: 'ROWS', fromIndices: [0], insertionIndex: 3 },
+          },
+        ],
+      }),
+    ).rejects.toThrow(
+      /'reorder_grid_tracks' \(index 0\) is not batchable — .*cannot guarantee restoring.*outside the batch/,
+    );
+    expect(reorderRows).not.toHaveBeenCalled();
+  });
+
+  it('restores a variable description, scopes and publishing flag', async () => {
+    const { figmaCtx, store, variables } = makeWide();
+    failingFrame(store);
+    const variable = {
+      id: 'V:1',
+      name: 'radius/md',
+      description: 'old note',
+      scopes: ['ALL_SCOPES'],
+      hiddenFromPublishing: false,
+    };
+    variables.set('V:1', variable);
+    const handler = createBatchHandler(figmaCtx, {
+      update_variable: createUpdateVariableHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'update_variable',
+            params: {
+              variableId: 'V:1',
+              description: 'new note',
+              scopes: ['CORNER_RADIUS'],
+              hiddenFromPublishing: true,
+            },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(variable).toMatchObject({
+      description: 'old note',
+      scopes: ['ALL_SCOPES'],
+      hiddenFromPublishing: false,
+    });
+  });
+
+  it('restores a collection publishing flag together with its names', async () => {
+    const { figmaCtx, store, collections } = makeWide();
+    failingFrame(store);
+    const collection: Record<string, unknown> = {
+      id: 'C:1',
+      name: 'Palette',
+      modes: [{ modeId: 'm1', name: 'Mode 1' }],
+      hiddenFromPublishing: false,
+      renameMode: () => undefined,
+    };
+    collections.set('C:1', collection);
+    const handler = createBatchHandler(figmaCtx, {
+      update_variable_collection: createUpdateVariableCollectionHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'update_variable_collection',
+            params: { collectionId: 'C:1', hiddenFromPublishing: true },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect(collection.hiddenFromPublishing).toBe(false);
   });
 });

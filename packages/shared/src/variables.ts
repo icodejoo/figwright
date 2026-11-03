@@ -91,6 +91,8 @@ export const SerializedVariableCollectionSchema = z.object({
   defaultModeId: z.string(),
   modes: z.array(z.object({ modeId: z.string(), name: z.string() })),
   variableIds: z.array(z.string()),
+  /** Present (true) only when the collection is kept out of a published library. */
+  hiddenFromPublishing: z.boolean().optional(),
 });
 export type SerializedVariableCollection = z.infer<typeof SerializedVariableCollectionSchema>;
 
@@ -121,6 +123,10 @@ export const SerializedVariableSchema = z.object({
    * and a narrow enum here would silently reject a scope a future release adds.
    */
   scopes: z.array(z.string()).optional(),
+  /** The designer's note on what the token is for. Omitted when empty. */
+  description: z.string().optional(),
+  /** Present (true) only when the variable is kept out of a published library. */
+  hiddenFromPublishing: z.boolean().optional(),
 });
 export type SerializedVariable = z.infer<typeof SerializedVariableSchema>;
 

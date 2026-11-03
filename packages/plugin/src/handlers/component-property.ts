@@ -3,8 +3,9 @@
 
 /**
  * The property types these tools author. VARIANT properties come from the variant-set structure
- * (combine_as_variants), and SLOT is out of scope — so authoring is BOOLEAN / TEXT / INSTANCE_SWAP,
- * the three that a plain component gains via addComponentProperty and that drive a sublayer field.
+ * (combine_as_variants). SLOT uses slotContentId, handled separately by bind_component_property.
+ * These ordinary sublayer properties are BOOLEAN / TEXT / INSTANCE_SWAP, the three that a plain
+ * component gains via addComponentProperty and that drive a sublayer field.
  */
 export const PROPERTY_TYPES = ['BOOLEAN', 'TEXT', 'INSTANCE_SWAP'] as const;
 export type AuthorablePropertyType = (typeof PROPERTY_TYPES)[number];

@@ -122,6 +122,19 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   it), `NONE` = fixed box (emit both, mind clipping); inside auto-layout trust
   `layoutSizingHorizontal/Vertical` instead. Each is omitted when it's
   the no-op default, so anything present is real intent — translate it, don't drop it.
+  - **The rarer text fields, each present only when set (and a text style carries the typography
+    ones: `textCase`, `textDecoration`, `leadingTrim`, `paragraphSpacing` / `paragraphIndent`,
+    `listSpacing`, `hangingPunctuation`, `hangingList`).** `leadingTrim: 'CAP_HEIGHT'` → the box
+    hugs the glyphs (`text-box-trim: trim-both; text-box-edge: cap alphabetic`) — don't add the
+    font's half-leading back as padding. `listSpacing` → the gap between list items.
+    `hangingPunctuation` → `hanging-punctuation: first`; `hangingList` → `list-style-position:
+    outside`. An underlined node may add `textDecorationStyle` (`WAVY` / `DOTTED` →
+    `text-decoration-style`), `textDecorationOffset` / `textDecorationThickness` (`{ unit, value }` →
+    `text-underline-offset` / `text-decoration-thickness`), `textDecorationColor` (hex →
+    `text-decoration-color`) and `textDecorationSkipInk: false` (→ `text-decoration-skip-ink:
+    none`). `openTypeFeatures` lists only the features that differ from the font's defaults
+    (`{ TNUM: true }` → `font-variant-numeric: tabular-nums`, `{ LIGA: false }` →
+    `font-variant-ligatures: none`; otherwise `font-feature-settings: "tnum" 1`).
   - **`textWrapStyle` is per paragraph, not per node.** When a node's paragraphs disagree the
     node-level field is absent and the real values ride in `segments` (a run carries it only when it
     is not `auto`) — so a `segments` array whose runs differ only in `textWrapStyle` is one text
@@ -497,3 +510,10 @@ accent bar the wrong colour, paddings off, a missing border — **even though `g
 every correct value the whole time**. The screenshot is for visual intent (the rough look), never for
 values. If you're about to type a px size, colour, font-size, radius, or spacing you did **not** read
 from grounding, stop and `get_design_context` that node.
+Native Slot reads carry `componentPropertyReferences.slotContentId`, linking the slot to the SLOT
+definition from `get_component_api` (including `slotSettings` and description). Treat its children
+as editable content; SLOT values cannot be set via `set_instance_properties`. Nonempty
+`limitViolations` reports BELOW_MIN, ABOVE_MAX or HAS_NON_PREFERRED rather than changing the tree.
+`scaleFactor` on an instance is Figma's scale-tool factor, omitted at 1; it is distinct from ordinary
+width/height resizing. Slot availability depends on the plan and editor and has not been validated
+on Starter. Component documentation is available from `get_component_api` / `get_local_components`.

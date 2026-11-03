@@ -78,14 +78,19 @@ export const createGetVariableDefsHandler =
 
     const result: GetVariableDefsResult = {
       ...displayP3Marker(figmaCtx),
-      collections: collections.map(c => ({
-        id: c.id,
-        name: c.name,
-        key: c.key,
-        defaultModeId: c.defaultModeId,
-        modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name })),
-        variableIds: [...c.variableIds],
-      })),
+      collections: collections.map(c => {
+        const out: GetVariableDefsResult['collections'][number] = {
+          id: c.id,
+          name: c.name,
+          key: c.key,
+          defaultModeId: c.defaultModeId,
+          modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name })),
+          variableIds: [...c.variableIds],
+        };
+        // Only when set, so every ordinary collection serializes exactly as before.
+        if (c.hiddenFromPublishing === true) out.hiddenFromPublishing = true;
+        return out;
+      }),
       variables: variables.map(varDef => {
         const out: GetVariableDefsResult['variables'][number] = {
           id: varDef.id,
@@ -110,6 +115,12 @@ export const createGetVariableDefsHandler =
         // only a deliberate narrowing is reported.
         const scopes = varDef.scopes;
         if (!(scopes.length === 1 && scopes[0] === 'ALL_SCOPES')) out.scopes = [...scopes];
+        // Designer's note on the token's purpose, and the keep-out-of-the-library flag — both only
+        // when set, since an untouched variable has neither.
+        if (typeof varDef.description === 'string' && varDef.description !== '') {
+          out.description = varDef.description;
+        }
+        if (varDef.hiddenFromPublishing === true) out.hiddenFromPublishing = true;
         return out;
       }),
     };

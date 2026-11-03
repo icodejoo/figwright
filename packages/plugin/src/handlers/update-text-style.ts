@@ -7,6 +7,7 @@ import {
   type TextStyleBindings,
 } from './bindings.js';
 import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
+import { assertTextStyleTypography, writeTextStyleTypography } from './text-style-typography.js';
 
 export const createUpdateTextStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -19,12 +20,22 @@ export const createUpdateTextStyleHandler =
       lineHeight?: unknown;
       letterSpacing?: unknown;
       textWrapStyle?: unknown;
+      textCase?: unknown;
+      textDecoration?: unknown;
+      leadingTrim?: unknown;
+      paragraphSpacing?: unknown;
+      paragraphIndent?: unknown;
+      listSpacing?: unknown;
+      hangingPunctuation?: unknown;
+      hangingList?: unknown;
       boundVariables?: unknown;
       description?: unknown;
     };
     if (typeof p.styleId !== 'string') {
       throw new TypeError('update_text_style: styleId must be a string');
     }
+
+    assertTextStyleTypography(p as Record<string, unknown>, 'update_text_style');
 
     const style = await figmaCtx.getStyleByIdAsync(p.styleId);
     if (style === null || style.type !== 'TEXT') {
@@ -56,6 +67,7 @@ export const createUpdateTextStyleHandler =
     if (typeof p.textWrapStyle === 'string') {
       ts.textWrapStyle = p.textWrapStyle as TextStyle['textWrapStyle'];
     }
+    writeTextStyleTypography(ts, p as Record<string, unknown>);
     if (typeof p.description === 'string') ts.description = p.description;
     // Last, so a bound field wins over a literal set for the same field above.
     if (p.boundVariables !== undefined) {

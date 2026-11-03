@@ -12,7 +12,7 @@ export const CREATE_VARIABLE_TOOL_NAME = 'create_variable';
 // worth the cost of this list going stale — a scope a future release adds simply can't be set until
 // the list is updated, which is a loud gap, not a silent one. On the way out the opposite holds:
 // a narrow enum would reject a value Figma really returned.
-const VARIABLE_SCOPES = [
+export const VARIABLE_SCOPES = [
   'ALL_SCOPES',
   'TEXT_CONTENT',
   'CORNER_RADIUS',

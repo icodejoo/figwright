@@ -8,7 +8,9 @@ export const getStylesTool: ToolSpec = {
   name: GET_STYLES_TOOL_NAME,
   description:
     "Return the document's local styles grouped as { paints, texts, effects, grids }. " +
-    'Paint styles carry their paints; text styles carry fontName / fontSize / lineHeight / letterSpacing / textWrapStyle; ' +
+    'Paint styles carry their paints; text styles carry fontName / fontSize / lineHeight / letterSpacing / textWrapStyle, plus ' +
+    'textCase / textDecoration / leadingTrim / paragraphSpacing / paragraphIndent / listSpacing / ' +
+    'hangingPunctuation / hangingList when they differ from the default; ' +
     'effect styles carry their effects; grid styles carry their layout grids. ' +
     'Any value the designer bound to a variable carries a `boundVariables` map ({ field: variableId }) ' +
     'on the object that owns it — the individual paint, gradient stop, effect or layout grid, and the ' +

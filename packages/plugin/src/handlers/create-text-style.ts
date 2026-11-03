@@ -7,6 +7,7 @@ import {
   type TextStyleBindings,
 } from './bindings.js';
 import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
+import { assertTextStyleTypography, writeTextStyleTypography } from './text-style-typography.js';
 
 export const createCreateTextStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -18,10 +19,19 @@ export const createCreateTextStyleHandler =
       lineHeight?: unknown;
       letterSpacing?: unknown;
       textWrapStyle?: unknown;
+      textCase?: unknown;
+      textDecoration?: unknown;
+      leadingTrim?: unknown;
+      paragraphSpacing?: unknown;
+      paragraphIndent?: unknown;
+      listSpacing?: unknown;
+      hangingPunctuation?: unknown;
+      hangingList?: unknown;
       boundVariables?: unknown;
       description?: unknown;
     };
     if (typeof p.name !== 'string') throw new TypeError('create_text_style: name must be a string');
+    assertTextStyleTypography(p as Record<string, unknown>, 'create_text_style');
 
     // Everything that can fail on caller input happens BEFORE anything is created. Creating first
     // would leave an orphan style behind in the document's style panel (and in whatever it
@@ -62,6 +72,7 @@ export const createCreateTextStyleHandler =
       if (typeof p.textWrapStyle === 'string') {
         style.textWrapStyle = p.textWrapStyle as TextStyle['textWrapStyle'];
       }
+      writeTextStyleTypography(style, p as Record<string, unknown>);
       if (typeof p.description === 'string') style.description = p.description;
       if (bindings !== undefined && table !== undefined) {
         await applyTextStyleBindings(figmaCtx, style, bindings, table);

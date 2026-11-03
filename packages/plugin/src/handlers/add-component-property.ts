@@ -22,6 +22,8 @@ export const createAddComponentPropertyHandler =
       type?: unknown;
       defaultValue?: unknown;
       preferredValues?: unknown;
+      description?: string;
+      slotSettings?: SlotSettings;
     };
     if (typeof p.componentId !== 'string') {
       throw new TypeError('add_component_property: componentId must be a string');
@@ -29,13 +31,13 @@ export const createAddComponentPropertyHandler =
     if (typeof p.name !== 'string' || p.name.length === 0) {
       throw new TypeError('add_component_property: name must be a non-empty string');
     }
-    if (!PROPERTY_TYPES.includes(p.type as AuthorablePropertyType)) {
+    if (p.type !== 'SLOT' && !PROPERTY_TYPES.includes(p.type as AuthorablePropertyType)) {
       throw new TypeError(
         `add_component_property: type must be one of ${PROPERTY_TYPES.join(' / ')} ` +
           '(VARIANT properties come from combine_as_variants)',
       );
     }
-    const type = p.type as AuthorablePropertyType;
+    const type = p.type as AuthorablePropertyType | 'SLOT';
 
     // defaultValue must match the type: BOOLEAN → boolean, TEXT → string, INSTANCE_SWAP → a
     // component key string. A mismatch is the easy caller error, so reject it with a precise message.
@@ -50,9 +52,17 @@ export const createAddComponentPropertyHandler =
           (type === 'INSTANCE_SWAP' ? ' (a component key)' : ''),
       );
     }
-    if (p.preferredValues !== undefined && type !== 'INSTANCE_SWAP') {
+    if (type === 'SLOT' && p.defaultValue !== '') {
       throw new TypeError(
-        'add_component_property: preferredValues is only valid for an INSTANCE_SWAP property',
+        'add_component_property: a SLOT property needs an empty string defaultValue',
+      );
+    }
+    if ((p.description !== undefined || p.slotSettings !== undefined) && type !== 'SLOT') {
+      throw new TypeError('add_component_property: description and slotSettings are SLOT only');
+    }
+    if (p.preferredValues !== undefined && type !== 'INSTANCE_SWAP' && type !== 'SLOT') {
+      throw new TypeError(
+        'add_component_property: preferredValues is only valid for an INSTANCE_SWAP or SLOT property',
       );
     }
 
@@ -60,15 +70,16 @@ export const createAddComponentPropertyHandler =
     if (node === null) throw new Error(`add_component_property: node ${p.componentId} not found`);
     const owner = resolveComponentOwner('add_component_property', node);
 
-    const options =
-      type === 'INSTANCE_SWAP' && Array.isArray(p.preferredValues)
-        ? { preferredValues: p.preferredValues as InstanceSwapPreferredValue[] }
-        : undefined;
+    const options: ComponentPropertyOptions = {};
+    if (Array.isArray(p.preferredValues))
+      options.preferredValues = p.preferredValues as InstanceSwapPreferredValue[];
+    if (p.description !== undefined) options.description = p.description;
+    if (p.slotSettings !== undefined) options.slotSettings = p.slotSettings;
     const propertyId = owner.addComponentProperty(
       p.name,
       type,
       p.defaultValue as string | boolean,
-      options,
+      Object.keys(options).length > 0 ? options : undefined,
     );
 
     const result: ComponentPropertyResult = {

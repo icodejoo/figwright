@@ -19,7 +19,11 @@ export const batchTool: ToolSpec = {
     'style, variable, component, structure and create writes (e.g. set_fills, set_text, ' +
     'set_auto_layout, reparent_nodes, create_frame). Ops that delete something (delete_*, ' +
     'ungroup_nodes, detach_instance, remove_animation_style) are refused, since what they delete ' +
-    'cannot come back under its id. Returns { ok, results } with one result per op in order; on ' +
+    'cannot come back under its id; so is reorder_grid_tracks, whose rollback cannot guarantee ' +
+    'restoring children that span several tracks (call it on its own). Every op is captured from ' +
+    "the document's state at the start of the batch, so an op that needs a node to already be in a " +
+    'GRID frame (set_grid_child) is refused when an earlier op of the same batch would make it so: ' +
+    'build the grid in a separate call first. Returns { ok, results } with one result per op in order; on ' +
     'failure the error says what was rolled back.',
   inputSchema: z.object({
     ops: z

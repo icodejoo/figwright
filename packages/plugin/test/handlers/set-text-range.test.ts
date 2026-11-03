@@ -374,3 +374,99 @@ describe('set_text_range on text set along a path', () => {
     expect(text.setRangeFontSize).not.toHaveBeenCalled();
   });
 });
+
+describe('set_text_range rarer per-run fields', () => {
+  const withDetailSetters = () => {
+    const text = makeText();
+    return Object.assign(text, {
+      setRangeTextDecorationStyle: vi.fn<Spy>(),
+      setRangeTextDecorationOffset: vi.fn<Spy>(),
+      setRangeTextDecorationThickness: vi.fn<Spy>(),
+      setRangeTextDecorationColor: vi.fn<Spy>(),
+      setRangeTextDecorationSkipInk: vi.fn<Spy>(),
+      setRangeParagraphSpacing: vi.fn<Spy>(),
+      setRangeParagraphIndent: vi.fn<Spy>(),
+      setRangeListSpacing: vi.fn<Spy>(),
+    });
+  };
+
+  it('maps each field to its setRange* call', async () => {
+    const text = withDetailSetters();
+    const result = (await createSetTextRangeHandler(makeFigma(text))({
+      nodeId: 'T:1',
+      ranges: [
+        {
+          start: 0,
+          end: 5,
+          textDecoration: 'UNDERLINE',
+          textDecorationStyle: 'WAVY',
+          textDecorationOffset: { unit: 'PIXELS', value: 2 },
+          textDecorationThickness: { unit: 'AUTO' },
+          textDecorationColor: { r: 0, g: 0, b: 1 },
+          textDecorationSkipInk: true,
+          paragraphSpacing: 8,
+          paragraphIndent: 4,
+          listSpacing: 3,
+        },
+      ],
+    })) as MutateResult;
+
+    expect(text.setRangeTextDecorationStyle).toHaveBeenCalledWith(0, 5, 'WAVY');
+    expect(text.setRangeTextDecorationOffset).toHaveBeenCalledWith(0, 5, {
+      unit: 'PIXELS',
+      value: 2,
+    });
+    expect(text.setRangeTextDecorationThickness).toHaveBeenCalledWith(0, 5, { unit: 'AUTO' });
+    expect(text.setRangeTextDecorationColor).toHaveBeenCalledWith(0, 5, {
+      value: { type: 'SOLID', color: { r: 0, g: 0, b: 1 } },
+    });
+    expect(text.setRangeTextDecorationSkipInk).toHaveBeenCalledWith(0, 5, true);
+    expect(text.setRangeParagraphSpacing).toHaveBeenCalledWith(0, 5, 8);
+    expect(text.setRangeParagraphIndent).toHaveBeenCalledWith(0, 5, 4);
+    expect(text.setRangeListSpacing).toHaveBeenCalledWith(0, 5, 3);
+    expect(result).toEqual({ ok: true, nodeId: 'T:1' });
+  });
+
+  it('underlines a run before styling the underline', async () => {
+    const text = withDetailSetters();
+    const order: string[] = [];
+    text.setRangeTextDecoration.mockImplementation(() => order.push('decoration'));
+    text.setRangeTextDecorationStyle.mockImplementation(() => order.push('style'));
+    await createSetTextRangeHandler(makeFigma(text))({
+      nodeId: 'T:1',
+      ranges: [{ start: 0, end: 5, textDecorationStyle: 'DOTTED', textDecoration: 'UNDERLINE' }],
+    });
+    expect(order).toEqual(['decoration', 'style']);
+  });
+
+  it('validates every range before the first one is written', async () => {
+    const text = withDetailSetters();
+    await expect(
+      createSetTextRangeHandler(makeFigma(text))({
+        nodeId: 'T:1',
+        ranges: [
+          { start: 0, end: 4, fontSize: 20 },
+          { start: 4, end: 8, textDecorationOffset: { unit: 'PERCENT' } },
+        ],
+      }),
+    ).rejects.toThrow(/ranges\[1\]\.textDecorationOffset/);
+    expect(text.setRangeFontSize).not.toHaveBeenCalled();
+
+    await expect(
+      createSetTextRangeHandler(makeFigma(text))({
+        nodeId: 'T:1',
+        ranges: [{ start: 0, end: 4, paragraphSpacing: -1 }],
+      }),
+    ).rejects.toThrow(/paragraphSpacing/);
+  });
+
+  it('refuses the paragraph and underline fields on text on a path', async () => {
+    const path = Object.assign(withDetailSetters(), { type: 'TEXT_PATH' });
+    await expect(
+      createSetTextRangeHandler(makeFigma(path))({
+        nodeId: 'T:1',
+        ranges: [{ start: 0, end: 3, paragraphSpacing: 4, listSpacing: 2 }],
+      }),
+    ).rejects.toThrow(/does not draw/);
+  });
+});

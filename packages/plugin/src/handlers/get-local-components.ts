@@ -5,6 +5,7 @@ import type {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { componentDocumentation } from './component-documentation.js';
 
 export const createGetLocalComponentsHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -58,6 +59,7 @@ export const createGetLocalComponentsHandler =
     for (const node of found.values()) {
       if (node.type === 'COMPONENT') {
         const info: SerializedComponentInfo = {
+          ...componentDocumentation(node),
           id: node.id,
           name: node.name,
           key: node.key,
@@ -70,6 +72,7 @@ export const createGetLocalComponentsHandler =
         components.push(info);
       } else {
         componentSets.push({
+          ...componentDocumentation(node),
           id: node.id,
           name: node.name,
           key: node.key,

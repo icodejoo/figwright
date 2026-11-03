@@ -278,3 +278,41 @@ describe('create_text_style handler', () => {
     expect(loaded).toContainEqual({ family: 'Roboto', style: 'Bold' });
   });
 });
+
+describe('create_text_style typography beyond font and size', () => {
+  it('writes case, decoration, trim, paragraph, list and hanging fields onto the style', async () => {
+    const { figma: f, style } = fakeFigma();
+    await createCreateTextStyleHandler(f)({
+      name: 'Label/Caps',
+      fontName: { family: 'Inter', style: 'Bold' },
+      fontSize: 12,
+      textCase: 'UPPER',
+      textDecoration: 'UNDERLINE',
+      leadingTrim: 'CAP_HEIGHT',
+      paragraphSpacing: 8,
+      paragraphIndent: 4,
+      listSpacing: 6,
+      hangingPunctuation: true,
+      hangingList: true,
+    });
+    expect(style).toMatchObject({
+      textCase: 'UPPER',
+      textDecoration: 'UNDERLINE',
+      leadingTrim: 'CAP_HEIGHT',
+      paragraphSpacing: 8,
+      paragraphIndent: 4,
+      listSpacing: 6,
+      hangingPunctuation: true,
+      hangingList: true,
+    });
+  });
+
+  it('refuses a mistyped field before creating anything', async () => {
+    const { figma: f, createTextStyle } = fakeFigma();
+    const handler = createCreateTextStyleHandler(f);
+    await expect(handler({ name: 'X', textCase: 3 })).rejects.toThrow(/textCase must be a string/);
+    await expect(handler({ name: 'X', listSpacing: -1 })).rejects.toThrow(/non-negative/);
+    await expect(handler({ name: 'X', hangingList: 'yes' })).rejects.toThrow(/boolean/);
+    expect(createTextStyle).not.toHaveBeenCalled();
+  });
+});

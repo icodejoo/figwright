@@ -24,7 +24,56 @@ type AutoLayoutTarget = {
   gridColumnGap: number;
   gridItemsPositioning: string;
   gridAutoTracks: string;
+  gridRowSizes: GridTrackSize[];
+  gridColumnSizes: GridTrackSize[];
   children: readonly SceneNode[];
+};
+
+/** One caller-supplied track, checked: a FIXED track needs a size, a HUG one takes none. */
+const toGridTrack = (raw: unknown, where: string): GridTrackSize => {
+  const t = (raw ?? {}) as { type?: unknown; value?: unknown };
+  if (t.type !== 'FLEX' && t.type !== 'FIXED' && t.type !== 'HUG') {
+    throw new TypeError(`set_auto_layout: ${where}.type must be FLEX / FIXED / HUG`);
+  }
+  if (t.value !== undefined && (typeof t.value !== 'number' || !(t.value > 0))) {
+    throw new TypeError(`set_auto_layout: ${where}.value must be a positive number`);
+  }
+  if (t.type === 'FIXED' && t.value === undefined) {
+    throw new TypeError(`set_auto_layout: ${where} is FIXED, so it needs a value (its size in px)`);
+  }
+  if (t.type === 'HUG' && t.value !== undefined) {
+    throw new TypeError(`set_auto_layout: ${where} is HUG, which takes no value`);
+  }
+  return t.value === undefined
+    ? ({ type: t.type } as GridTrackSize)
+    : ({ type: t.type, value: t.value } as GridTrackSize);
+};
+
+/**
+ * Validate a gridRowSizes / gridColumnSizes argument against the track count the grid will have, so
+ * a wrong-length array is refused before anything is written (Figma would throw only after the mode
+ * and counts had already been applied). `count` is undefined when it cannot be known up front — a
+ * frame not yet a grid with no count in the call (Figma's default grid is not read here), or rows
+ * Figma manages itself under gridAutoTracks ROWS — and the length is then left for Figma to judge:
+ * a failure there can come after the mode switch, and the caller writes the hint for it.
+ */
+const parseGridTracks = (
+  raw: unknown,
+  key: 'gridRowSizes' | 'gridColumnSizes',
+  count: number | undefined,
+): GridTrackSize[] | undefined => {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new TypeError(`set_auto_layout: ${key} must be a non-empty array`);
+  }
+  if (count !== undefined && raw.length !== count) {
+    throw new Error(
+      `set_auto_layout: ${key} has ${raw.length} tracks but the grid will have ${count} — pass ` +
+        `one track per ${key === 'gridRowSizes' ? 'row' : 'column'}, or change the count in the ` +
+        'same call',
+    );
+  }
+  return raw.map((t, i) => toGridTrack(t, `${key}[${i}]`));
 };
 
 /** A child Figma left without a cell: anchor -1 on either axis, outside an absolute escape. */
@@ -72,6 +121,41 @@ export const createSetAutoLayoutHandler =
             'wrapping flex — pass layoutWrap: "WRAP" (in this call or before)',
         );
       }
+    }
+
+    // Track sizes are checked against the count the grid will end up with, before any write. Rows
+    // under gridAutoTracks ROWS have no count of their own to check against.
+    let rowSizes: GridTrackSize[] | undefined;
+    let columnSizes: GridTrackSize[] | undefined;
+    // True when a sizes array could not be length-checked up front, so Figma's own check may fire
+    // after the frame has already switched to GRID.
+    let unverifiedSizes = false;
+    if (p.layoutMode === 'GRID') {
+      const wasGrid = target.layoutMode === 'GRID';
+      const rowsAuto = (p.gridAutoTracks ?? (wasGrid ? target.gridAutoTracks : 'NONE')) === 'ROWS';
+      const rowCount =
+        typeof p.gridRowCount === 'number'
+          ? p.gridRowCount
+          : wasGrid
+            ? target.gridRowCount
+            : undefined;
+      const columnCount =
+        typeof p.gridColumnCount === 'number'
+          ? p.gridColumnCount
+          : wasGrid
+            ? target.gridColumnCount
+            : undefined;
+      rowSizes = parseGridTracks(p.gridRowSizes, 'gridRowSizes', rowsAuto ? undefined : rowCount);
+      columnSizes = parseGridTracks(p.gridColumnSizes, 'gridColumnSizes', columnCount);
+      unverifiedSizes =
+        (rowSizes !== undefined && (rowsAuto || rowCount === undefined)) ||
+        (columnSizes !== undefined && columnCount === undefined);
+    } else if (p.gridRowSizes !== undefined || p.gridColumnSizes !== undefined) {
+      // NONE included: sizes the call cannot apply are an error, not a silent ok.
+      throw new Error(
+        'set_auto_layout: gridRowSizes / gridColumnSizes apply to layoutMode GRID only — ' +
+          `layoutMode ${p.layoutMode} has no tracks`,
+      );
     }
 
     // While gridAutoTracks is ROWS, Figma owns the row count and throws on any write to it — even
@@ -135,6 +219,22 @@ export const createSetAutoLayoutHandler =
           'gridColumnGap',
         ] as const) {
           if (typeof p[key] === 'number') target[key] = p[key] as number;
+        }
+        // Track sizes follow the counts they are sized against.
+        try {
+          if (rowSizes !== undefined) target.gridRowSizes = rowSizes;
+          if (columnSizes !== undefined) target.gridColumnSizes = columnSizes;
+        } catch (err) {
+          if (!unverifiedSizes) throw err;
+          throw new Error(
+            `set_auto_layout: Figma refused the track sizes (${err instanceof Error ? err.message : String(err)}). ` +
+              'Their length could not be checked beforehand (the frame was not a grid yet or has ' +
+              'gridAutoTracks ROWS), so the frame may already have switched to GRID with the other ' +
+              'values applied — retry with arrays matching the real track counts (pass ' +
+              'gridColumnCount, and gridRowCount unless gridAutoTracks is ROWS, where Figma manages ' +
+              'the row count — set gridAutoTracks NONE first to give it), or restore it by hand',
+            { cause: err },
+          );
         }
         if (p.gridAutoTracks === 'ROWS') target.gridAutoTracks = 'ROWS';
       } else {

@@ -36,6 +36,17 @@ export const SerializedTextStyleSchema = z.object({
   // AUTO | BALANCE | PRETTY — a text style carries its own wrap balancing, so a style named
   // "Heading/H1" can mean `text-wrap: balance` for every node bound to it.
   textWrapStyle: z.string(),
+  // The rest of Figma's TextStyle typography, each emitted only off its default (ORIGINAL / NONE /
+  // 0 / false) so an ordinary style costs nothing extra. A style named "Label/Caps" can therefore
+  // say `text-transform: uppercase` instead of leaving it to the raster.
+  textCase: z.string().optional(),
+  textDecoration: z.string().optional(),
+  leadingTrim: z.string().optional(),
+  paragraphIndent: z.number().optional(),
+  paragraphSpacing: z.number().optional(),
+  listSpacing: z.number().optional(),
+  hangingPunctuation: z.boolean().optional(),
+  hangingList: z.boolean().optional(),
   /**
    * `field` → variable id for the typography fields Figma lets a text style bind (fontSize,
    * lineHeight, letterSpacing, fontFamily, fontStyle, fontWeight, paragraphSpacing,

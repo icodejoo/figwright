@@ -17,6 +17,8 @@ export const createEditComponentPropertyHandler =
       name?: unknown;
       defaultValue?: unknown;
       preferredValues?: unknown;
+      description?: string;
+      slotSettings?: SlotSettings;
     };
     if (typeof p.componentId !== 'string') {
       throw new TypeError('edit_component_property: componentId must be a string');
@@ -27,9 +29,15 @@ export const createEditComponentPropertyHandler =
     const renaming = typeof p.name === 'string';
     const redefaulting = p.defaultValue !== undefined;
     const repreferring = p.preferredValues !== undefined;
-    if (!renaming && !redefaulting && !repreferring) {
+    if (
+      !renaming &&
+      !redefaulting &&
+      !repreferring &&
+      p.description === undefined &&
+      p.slotSettings === undefined
+    ) {
       throw new TypeError(
-        'edit_component_property: supply at least one of name / defaultValue / preferredValues',
+        'edit_component_property: supply at least one of name / defaultValue / preferredValues / description / slotSettings',
       );
     }
 
@@ -43,9 +51,15 @@ export const createEditComponentPropertyHandler =
           '(get_component_api lists the current ids)',
       );
     }
-    if (repreferring && def.type !== 'INSTANCE_SWAP') {
+    if (redefaulting && (def.type === 'SLOT' || def.type === 'VARIANT')) {
+      throw new TypeError(`edit_component_property: ${def.type} does not support defaultValue`);
+    }
+    if ((p.description !== undefined || p.slotSettings !== undefined) && def.type !== 'SLOT') {
+      throw new TypeError('edit_component_property: description and slotSettings are SLOT only');
+    }
+    if (repreferring && def.type !== 'INSTANCE_SWAP' && def.type !== 'SLOT') {
       throw new TypeError(
-        'edit_component_property: preferredValues can only be edited on an INSTANCE_SWAP property',
+        'edit_component_property: preferredValues can only be edited on an INSTANCE_SWAP or SLOT property',
       );
     }
 
@@ -53,10 +67,14 @@ export const createEditComponentPropertyHandler =
       name?: string;
       defaultValue?: string | boolean;
       preferredValues?: InstanceSwapPreferredValue[];
+      description?: string;
+      slotSettings?: SlotSettings;
     } = {};
     if (renaming) newValue.name = p.name as string;
     if (redefaulting) newValue.defaultValue = p.defaultValue as string | boolean;
     if (repreferring) newValue.preferredValues = p.preferredValues as InstanceSwapPreferredValue[];
+    if (p.description !== undefined) newValue.description = p.description;
+    if (p.slotSettings !== undefined) newValue.slotSettings = p.slotSettings;
 
     const propertyId = owner.editComponentProperty(p.propertyId, newValue);
 

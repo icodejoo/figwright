@@ -485,6 +485,16 @@ export const SerializedMainComponentSchema = z.object({
 });
 export type SerializedMainComponent = z.infer<typeof SerializedMainComponentSchema>;
 
+/**
+ * A text decoration's offset or thickness: `{ unit: "AUTO" }` (the font's own metric) or a `PIXELS`
+ * / `PERCENT` `value` — CSS `text-underline-offset` / `text-decoration-thickness`.
+ */
+export const SerializedTextDecorationMetricSchema = z.object({
+  unit: z.string(),
+  value: z.number().optional(),
+});
+export type SerializedTextDecorationMetric = z.infer<typeof SerializedTextDecorationMetricSchema>;
+
 /** A hyperlink target on a text run or node: a URL, or an in-file NODE link (`value` is the id). */
 export const SerializedHyperlinkSchema = z.object({
   type: z.string(),
@@ -735,6 +745,10 @@ export interface SerializedNode {
   // instance variant / props + which component it instantiates
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   mainComponent?: SerializedMainComponent;
+  /** Instance scale-tool factor (omitted at 1), not the instance resize ratio. */
+  scaleFactor?: number;
+  /** Nonempty native Slot constraint violations. */
+  limitViolations?: ('BELOW_MIN' | 'ABOVE_MAX' | 'HAS_NON_PREFERRED')[];
   /**
    * Which component property drives this layer — present only on a sublayer inside a COMPONENT or
    * an INSTANCE, keyed by the field the property controls. The value is the property name carrying
@@ -750,6 +764,7 @@ export interface SerializedNode {
     readonly visible?: string;
     readonly characters?: string;
     readonly mainComponent?: string;
+    readonly slotContentId?: string;
   };
   // text typography
   characters?: string;
@@ -766,6 +781,24 @@ export interface SerializedNode {
   maxLines?: number | null;
   paragraphSpacing?: number;
   paragraphIndent?: number;
+  /**
+   * The rarer node-level text settings, each present only off its default and only when uniform
+   * across the node (a mixed value is left out, as `textWrapStyle` is): `leadingTrim` CAP_HEIGHT
+   * (CSS `text-box-trim`), `listSpacing` px between list items, the two hanging flags, the
+   * decoration details of an underlined / struck-through node (`textDecorationStyle` WAVY | DOTTED,
+   * offset, thickness, colour as hex, `textDecorationSkipInk: false`), and `openTypeFeatures` —
+   * only the features that diverge from the font's defaults (`{ TNUM: true }`).
+   */
+  leadingTrim?: string;
+  listSpacing?: number;
+  hangingPunctuation?: boolean;
+  hangingList?: boolean;
+  textDecorationStyle?: string;
+  textDecorationOffset?: SerializedTextDecorationMetric;
+  textDecorationThickness?: SerializedTextDecorationMetric;
+  textDecorationColor?: string;
+  textDecorationSkipInk?: boolean;
+  openTypeFeatures?: Record<string, boolean>;
   /**
    * How each paragraph balances its line breaks: AUTO | BALANCE | PRETTY — Figma's values are CSS
    * `text-wrap`'s verbatim. Omitted when the node's paragraphs disagree (`mixed`), in which case
@@ -874,11 +907,14 @@ export const SerializedNodeSchema = z.lazy(() =>
     explicitVariableModes: z.record(z.string(), z.string()).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
     mainComponent: SerializedMainComponentSchema.optional(),
+    scaleFactor: z.number().optional(),
+    limitViolations: z.array(z.enum(['BELOW_MIN', 'ABOVE_MAX', 'HAS_NON_PREFERRED'])).optional(),
     componentPropertyReferences: z
       .object({
         visible: z.string().optional(),
         characters: z.string().optional(),
         mainComponent: z.string().optional(),
+        slotContentId: z.string().optional(),
       })
       .optional(),
     characters: z.string().optional(),
@@ -895,6 +931,16 @@ export const SerializedNodeSchema = z.lazy(() =>
     maxLines: z.number().nullable().optional(),
     paragraphSpacing: z.number().optional(),
     paragraphIndent: z.number().optional(),
+    leadingTrim: z.string().optional(),
+    listSpacing: z.number().optional(),
+    hangingPunctuation: z.boolean().optional(),
+    hangingList: z.boolean().optional(),
+    textDecorationStyle: z.string().optional(),
+    textDecorationOffset: SerializedTextDecorationMetricSchema.optional(),
+    textDecorationThickness: SerializedTextDecorationMetricSchema.optional(),
+    textDecorationColor: z.string().optional(),
+    textDecorationSkipInk: z.boolean().optional(),
+    openTypeFeatures: z.record(z.string(), z.boolean()).optional(),
     textWrapStyle: z.string().optional(),
     hyperlink: SerializedHyperlinkSchema.optional(),
     segments: z.array(SerializedTextSegmentSchema).optional(),

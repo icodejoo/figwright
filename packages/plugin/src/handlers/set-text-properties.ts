@@ -2,6 +2,13 @@ import type { MutateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaFontName } from './convert.js';
+import {
+  assertBoolean,
+  assertDecorationStyle,
+  assertNonNegative,
+  toDecorationColor,
+  toDecorationMetric,
+} from './text-detail.js';
 import { isTextLike, unsupportedOnPath } from './text-like.js';
 
 /**
@@ -22,6 +29,15 @@ export const createSetTextPropertiesHandler =
       letterSpacing?: unknown;
       textCase?: unknown;
       textDecoration?: unknown;
+      textDecorationStyle?: unknown;
+      textDecorationOffset?: unknown;
+      textDecorationThickness?: unknown;
+      textDecorationColor?: unknown;
+      textDecorationSkipInk?: unknown;
+      leadingTrim?: unknown;
+      listSpacing?: unknown;
+      hangingPunctuation?: unknown;
+      hangingList?: unknown;
       paragraphSpacing?: unknown;
       paragraphIndent?: unknown;
       textWrapStyle?: unknown;
@@ -64,6 +80,42 @@ export const createSetTextPropertiesHandler =
       throw new TypeError('set_text_properties: maxLines must be a number or null');
     }
 
+    // The rarer settings are converted up front too, so a malformed one fails before any write.
+    if (p.leadingTrim !== undefined && p.leadingTrim !== 'NONE' && p.leadingTrim !== 'CAP_HEIGHT') {
+      throw new TypeError('set_text_properties: leadingTrim must be NONE or CAP_HEIGHT');
+    }
+    const listSpacing =
+      p.listSpacing === undefined
+        ? undefined
+        : assertNonNegative(p.listSpacing, 'set_text_properties: listSpacing');
+    const hangingPunctuation =
+      p.hangingPunctuation === undefined
+        ? undefined
+        : assertBoolean(p.hangingPunctuation, 'set_text_properties: hangingPunctuation');
+    const hangingList =
+      p.hangingList === undefined
+        ? undefined
+        : assertBoolean(p.hangingList, 'set_text_properties: hangingList');
+    const decorationStyle =
+      p.textDecorationStyle === undefined
+        ? undefined
+        : assertDecorationStyle(p.textDecorationStyle, 'set_text_properties: textDecorationStyle');
+    const decorationOffset =
+      p.textDecorationOffset === undefined
+        ? undefined
+        : toDecorationMetric(p.textDecorationOffset, 'set_text_properties: textDecorationOffset');
+    const decorationThickness =
+      p.textDecorationThickness === undefined
+        ? undefined
+        : toDecorationMetric(
+            p.textDecorationThickness,
+            'set_text_properties: textDecorationThickness',
+          );
+    const decorationSkipInk =
+      p.textDecorationSkipInk === undefined
+        ? undefined
+        : assertBoolean(p.textDecorationSkipInk, 'set_text_properties: textDecorationSkipInk');
+
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
     if (!isTextLike(node)) {
       throw new Error(`set_text_properties: node ${p.nodeId} is not a TEXT node or text on a path`);
@@ -91,6 +143,14 @@ export const createSetTextPropertiesHandler =
     // is nothing to write at all, which is the one case that touches no text.
     const fontName =
       p.fontName === undefined ? undefined : toFigmaFontName(p.fontName as Record<string, unknown>);
+    const decorationColor =
+      p.textDecorationColor === undefined
+        ? undefined
+        : toDecorationColor(
+            figmaCtx,
+            p.textDecorationColor,
+            'set_text_properties: textDecorationColor',
+          );
 
     const willWrite =
       p.fontName !== undefined ||
@@ -99,6 +159,15 @@ export const createSetTextPropertiesHandler =
       p.letterSpacing !== undefined ||
       p.textCase !== undefined ||
       p.textDecoration !== undefined ||
+      p.textDecorationStyle !== undefined ||
+      p.textDecorationOffset !== undefined ||
+      p.textDecorationThickness !== undefined ||
+      p.textDecorationColor !== undefined ||
+      p.textDecorationSkipInk !== undefined ||
+      p.leadingTrim !== undefined ||
+      p.listSpacing !== undefined ||
+      p.hangingPunctuation !== undefined ||
+      p.hangingList !== undefined ||
       p.paragraphSpacing !== undefined ||
       p.paragraphIndent !== undefined ||
       p.textWrapStyle !== undefined ||
@@ -129,6 +198,17 @@ export const createSetTextPropertiesHandler =
     if (p.textCase !== undefined) text.textCase = p.textCase as TextNode['textCase'];
     if (p.textDecoration !== undefined)
       text.textDecoration = p.textDecoration as TextNode['textDecoration'];
+    // The underline details follow textDecoration, so a call that turns the underline on and styles
+    // it at once finds the decoration already in place.
+    if (decorationStyle !== undefined) text.textDecorationStyle = decorationStyle;
+    if (decorationOffset !== undefined) text.textDecorationOffset = decorationOffset;
+    if (decorationThickness !== undefined) text.textDecorationThickness = decorationThickness;
+    if (decorationColor !== undefined) text.textDecorationColor = decorationColor;
+    if (decorationSkipInk !== undefined) text.textDecorationSkipInk = decorationSkipInk;
+    if (p.leadingTrim !== undefined) text.leadingTrim = p.leadingTrim as TextNode['leadingTrim'];
+    if (listSpacing !== undefined) text.listSpacing = listSpacing;
+    if (hangingPunctuation !== undefined) text.hangingPunctuation = hangingPunctuation;
+    if (hangingList !== undefined) text.hangingList = hangingList;
     if (p.paragraphSpacing !== undefined) text.paragraphSpacing = p.paragraphSpacing as number;
     if (p.paragraphIndent !== undefined) text.paragraphIndent = p.paragraphIndent as number;
     if (p.textWrapStyle !== undefined)

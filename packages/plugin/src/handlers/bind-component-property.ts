@@ -8,7 +8,7 @@ import {
   PROPERTY_TYPES,
 } from './component-property.js';
 
-const REF_FIELDS = ['visible', 'characters', 'mainComponent'] as const;
+const REF_FIELDS = ['visible', 'characters', 'mainComponent', 'slotContentId'] as const;
 type RefField = (typeof REF_FIELDS)[number];
 
 type Referencing = SceneNode & {
@@ -56,6 +56,9 @@ export const createBindComponentPropertyHandler =
     }
 
     const target = node as Referencing;
+    if (field === 'slotContentId' && node.type !== 'FRAME' && node.type !== 'SLOT') {
+      throw new Error('bind_component_property: slotContentId requires a FRAME or SLOT');
+    }
     const refs: Partial<Record<RefField, string>> = { ...target.componentPropertyReferences };
 
     if (p.propertyId === null) {
@@ -78,12 +81,13 @@ export const createBindComponentPropertyHandler =
             '(add it with add_component_property first)',
         );
       }
-      if (!PROPERTY_TYPES.includes(def.type as AuthorablePropertyType)) {
+      if (def.type !== 'SLOT' && !PROPERTY_TYPES.includes(def.type as AuthorablePropertyType)) {
         throw new Error(
           `bind_component_property: property ${p.propertyId} is a ${def.type} property, which isn't bound this way`,
         );
       }
-      const expected = FIELD_FOR_TYPE[def.type as AuthorablePropertyType];
+      const expected =
+        def.type === 'SLOT' ? 'slotContentId' : FIELD_FOR_TYPE[def.type as AuthorablePropertyType];
       if (expected !== field) {
         throw new Error(
           `bind_component_property: a ${def.type} property binds to "${expected}", not "${field}"`,

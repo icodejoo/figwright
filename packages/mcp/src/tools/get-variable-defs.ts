@@ -14,7 +14,9 @@ export const getVariableDefsTool: ToolSpec = {
     'or — for an EASING variable — an easing curve ' +
     '{ type, easingFunctionCubicBezier?, easingFunctionSpring? }). A variable also carries scopes ' +
     'when the designer narrowed where Figma offers it (e.g. ["CORNER_RADIUS"]) — authoritative ' +
-    'intent about what the token is for; absent means every scope. This lists local definitions, ' +
+    'intent about what the token is for; absent means every scope. A variable or collection may ' +
+    'also carry description (the designer note on the token) and hiddenFromPublishing: true ' +
+    '(kept out of a published library), each present only when set. This lists local definitions, ' +
     'not all shared library references. To use a published variable in another file, pass its key ' +
     'to import_variable in that target file and use the returned variableId. A result led by ' +
     'colorProfile: "DISPLAY_P3" comes from a Display P3 file: its COLOR values are P3, so emit ' +

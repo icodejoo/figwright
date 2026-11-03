@@ -37,9 +37,12 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * transformModifiers / repeatTransforms, a brush / dynamic stroke's complexStrokeProperties, a
  * width profile, a text path's text, typography and textPathStartData, the renderBounds of those
  * nodes, and a pattern's verticalAlignment — a v7 baseline reads a dial as one tick and a text path
- * as an empty shape.
+ * as an empty shape. v10: a text node's rarer settings — leadingTrim, listSpacing, the hanging
+ * flags, the underline's style / offset / thickness / colour / skipInk, and openTypeFeatures — a v9
+ * baseline holds such a node without them and would report each as changed.
  */
-export const SNAPSHOT_FORMAT_VERSION = 9;
+// v11: native Slot violations / slotContentId references and the instance scale-tool factor.
+export const SNAPSHOT_FORMAT_VERSION = 11;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

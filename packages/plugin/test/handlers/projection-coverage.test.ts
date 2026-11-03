@@ -206,6 +206,17 @@ const richText = base({
   paragraphSpacing: 8,
   paragraphIndent: 4,
   textWrapStyle: 'BALANCE',
+  // The rarer node-level text settings, each off its default.
+  leadingTrim: 'CAP_HEIGHT',
+  listSpacing: 6,
+  hangingPunctuation: true,
+  hangingList: true,
+  textDecorationStyle: 'WAVY',
+  textDecorationOffset: { unit: 'PIXELS', value: 2 },
+  textDecorationThickness: { unit: 'PERCENT', value: 8 },
+  textDecorationColor: { value: SOLID },
+  textDecorationSkipInk: false,
+  openTypeFeatures: { TNUM: true },
   hyperlink: { type: 'URL', value: 'https://example.com' },
   textStyleId: 'S:text',
   getStyledTextSegments: () => [fullSegment],
@@ -274,7 +285,20 @@ const textOnPath = base({
   textPathStartData: { segment: 1, position: 0.5 },
 });
 
-const FIXTURES = [frameInGrid, arcWithConstraints, richText, drawnStroke, repeatGroup, textOnPath];
+const FIXTURES = [
+  frameInGrid,
+  arcWithConstraints,
+  richText,
+  drawnStroke,
+  repeatGroup,
+  textOnPath,
+  base({ type: 'INSTANCE', scaleFactor: 2 }),
+  base({
+    type: 'SLOT',
+    limitViolations: ['ABOVE_MAX'],
+    componentPropertyReferences: { slotContentId: 'Content#1' },
+  }),
+];
 
 // SerializedNodeSchema is exported as a recursive z.lazy — unwrap to the inner object for keys.
 const schemaKeys = Object.keys(

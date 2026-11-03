@@ -123,6 +123,23 @@ Library components need no import step: `create_instance` takes their `component
 
 ## Style in the create call
 
+For component maintenance, use `get_component_instances` and `get_style_consumers` to find
+references directly. Both load all pages and return `truncated` when their limit is exceeded;
+never treat a truncated result as proof that an asset is unused. `update_component` edits local
+component/set descriptions and the single documentation link. `reorder_styles` moves a local style
+within its folder; `reorder_style_folders` moves sibling folders of the same style kind.
+
+Native Slots require Figma Design and their availability depends on the plan/editor. `create_slot`
+creates a Slot and its property together; `edit_component_property` sets its description,
+preferredValues and slotSettings. `add_component_property` also accepts SLOT with an empty-string
+default, then `bind_component_property` with `field: 'slotContentId'` converts a component's FRAME
+to a Slot. Edit instance slot contents using normal child-node operations, never
+`set_instance_properties`. `reset_slot` restores default slot content; `reset_overrides` clears
+instance overrides, optionally recursively. Both resets may destroy custom child ids and are not
+batchable. Slot binding conversions are also refused in batch. Creating a slot, editing component
+documentation, and reordering styles/folders have inverses; editing slot settings in batch requires
+that every changed setting have an explicit prior value, rather than guessing an absent default.
+
 `create_frame` / `create_rectangle` / `create_ellipse` / `create_shape` / `create_text` accept the
 styling you would otherwise do next: `fills`, `strokes` (+ `strokeWeight`, `strokeAlign`),
 `layoutSizingHorizontal` / `layoutSizingVertical`; a frame or rectangle also `cornerRadius`; a frame also takes `autoLayout` (the whole
@@ -147,6 +164,12 @@ bind it afterwards with `bind_variable_to_node`.
   pinned cell per item. Keep the default `MANUAL` only when the code places items itself
   (`grid-row` / `grid-column` / `grid-template-areas`). A grid that was born flowing cannot be
   switched to `MANUAL` — its children never held a cell, and the tool refuses rather than strand them.
+- **Size the tracks and place the cells with the grid tools, not by eye.** `set_auto_layout` takes
+  `gridRowSizes` / `gridColumnSizes` (one `{ type: FLEX | FIXED | HUG, value? }` per track — `FLEX` is
+  the `fr` unit, `FIXED` px); `set_grid_child` pins a child to `rowAnchorIndex` / `columnAnchorIndex`,
+  spans it (`rowSpan` / `columnSpan`) and aligns it in its cell; `reparent_nodes` can drop a node into a
+  cell in one step; `reorder_grid_tracks` moves whole rows / columns. All of them need a `MANUAL`
+  grid (a `ROW_AUTO_FLOW` grid places by layer order).
 - **Absolute `x`/`y` is only for where a top-level container sits on the canvas** — never to position
   children that belong in a layout. Hand-placing laid-out children is the cardinal write miss
   (it looks right, then breaks the moment content changes). Set those exact coordinates with
@@ -337,3 +360,12 @@ per paragraph, so to vary it within one node use `set_text_range` with a range i
 you mean — that range selects the paragraph, not the characters. A text style can carry it too
 (`create_text_style` / `update_text_style`), which is the right home when every node bound to
 "Heading/H1" should balance.
+
+The same goes for casing and the finer typography: a source `text-transform: uppercase` is
+`textCase: 'UPPER'` on the **style** (`create_text_style` / `update_text_style` take `textCase`,
+`textDecoration`, `leadingTrim`, `paragraphSpacing` / `paragraphIndent`, `listSpacing` and the two
+hanging flags), so every node bound to "Label/Caps" is uppercase without being set one by one.
+`set_text_properties` takes `leadingTrim: 'CAP_HEIGHT'` (`text-box-trim`) and the underline details
+(`textDecorationStyle` / `Offset` / `Thickness` / `Color` / `SkipInk`) for one node, and
+`set_text_range` the underline details and paragraph fields per run. Variable metadata — a token's
+note, its picker `scopes`, `hiddenFromPublishing` for base palettes — is `update_variable`, in place.

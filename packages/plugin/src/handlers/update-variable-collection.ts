@@ -64,12 +64,21 @@ const parseModes = (raw: unknown, collection: VariableCollection): ModeRename[] 
 export const createUpdateVariableCollectionHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
-    const p = (params ?? {}) as { collectionId?: unknown; name?: unknown; modes?: unknown };
+    const p = (params ?? {}) as {
+      collectionId?: unknown;
+      name?: unknown;
+      modes?: unknown;
+      hiddenFromPublishing?: unknown;
+    };
     if (typeof p.collectionId !== 'string') {
       throw new TypeError('update_variable_collection: collectionId must be a string');
     }
     if (p.name !== undefined && (typeof p.name !== 'string' || p.name.length === 0)) {
       throw new TypeError('update_variable_collection: name must be a non-empty string');
+    }
+
+    if (p.hiddenFromPublishing !== undefined && typeof p.hiddenFromPublishing !== 'boolean') {
+      throw new TypeError('update_variable_collection: hiddenFromPublishing must be a boolean');
     }
 
     const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(p.collectionId);
@@ -81,12 +90,16 @@ export const createUpdateVariableCollectionHandler =
 
     if (typeof p.name === 'string') collection.name = p.name;
     for (const rename of renames) collection.renameMode(rename.modeId, rename.name);
+    if (typeof p.hiddenFromPublishing === 'boolean') {
+      collection.hiddenFromPublishing = p.hiddenFromPublishing;
+    }
 
     const result: UpdateCollectionResult = {
       ok: true,
       collectionId: collection.id,
       name: collection.name,
       modes: collection.modes.map(mode => ({ modeId: mode.modeId, name: mode.name })),
+      hiddenFromPublishing: collection.hiddenFromPublishing,
     };
     return result;
   };

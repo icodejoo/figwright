@@ -383,3 +383,111 @@ describe('set_text_properties on text set along a path', () => {
     expect(node).not.toHaveProperty('fontSize');
   });
 });
+
+describe('set_text_properties rarer settings', () => {
+  const makeText = () => ({
+    id: '1:1',
+    type: 'TEXT',
+    characters: 'Label',
+    fontName: { family: 'Inter', style: 'Regular' },
+    textDecoration: 'NONE',
+    leadingTrim: 'NONE',
+    listSpacing: 0,
+    hangingPunctuation: false,
+    hangingList: false,
+  });
+
+  it('writes trim, list spacing and the hanging flags', async () => {
+    const node = makeText();
+    const result = (await createSetTextPropertiesHandler(fakeFigma(node))({
+      nodeId: '1:1',
+      leadingTrim: 'CAP_HEIGHT',
+      listSpacing: 6,
+      hangingPunctuation: true,
+      hangingList: true,
+    })) as MutateResult;
+    expect(node).toMatchObject({
+      leadingTrim: 'CAP_HEIGHT',
+      listSpacing: 6,
+      hangingPunctuation: true,
+      hangingList: true,
+    });
+    expect(result).toEqual({ ok: true, nodeId: '1:1' });
+  });
+
+  it('loads the font first, since these writes need it like any typography write', async () => {
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    await createSetTextPropertiesHandler(fakeFigma(makeText(), loadFontAsync))({
+      nodeId: '1:1',
+      leadingTrim: 'CAP_HEIGHT',
+    });
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+  });
+
+  it('writes the underline details after the decoration they describe', async () => {
+    const order: string[] = [];
+    const node = makeText() as Record<string, unknown>;
+    for (const key of ['textDecoration', 'textDecorationStyle', 'textDecorationColor']) {
+      let value: unknown = null;
+      Object.defineProperty(node, key, {
+        get: () => value,
+        set: v => {
+          order.push(key);
+          value = v;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+    }
+    await createSetTextPropertiesHandler(fakeFigma(node))({
+      nodeId: '1:1',
+      textDecorationColor: { r: 1, g: 0, b: 0 },
+      textDecorationStyle: 'DOTTED',
+      textDecoration: 'UNDERLINE',
+      textDecorationOffset: { unit: 'PIXELS', value: 3 },
+      textDecorationThickness: { unit: 'PERCENT', value: 10 },
+      textDecorationSkipInk: false,
+    });
+    expect(order).toEqual(['textDecoration', 'textDecorationStyle', 'textDecorationColor']);
+    expect(node.textDecorationColor).toEqual({
+      value: { type: 'SOLID', color: { r: 1, g: 0, b: 0 } },
+    });
+    expect(node).toMatchObject({
+      textDecorationOffset: { unit: 'PIXELS', value: 3 },
+      textDecorationThickness: { unit: 'PERCENT', value: 10 },
+      textDecorationSkipInk: false,
+    });
+  });
+
+  it('turns "AUTO" into Figma\'s colour wrapper', async () => {
+    const node = makeText() as Record<string, unknown>;
+    await createSetTextPropertiesHandler(fakeFigma(node))({
+      nodeId: '1:1',
+      textDecorationColor: 'AUTO',
+    });
+    expect(node.textDecorationColor).toEqual({ value: 'AUTO' });
+  });
+
+  it('refuses malformed values before writing anything', async () => {
+    const node = makeText();
+    const handler = createSetTextPropertiesHandler(fakeFigma(node));
+    const run = (extra: Record<string, unknown>) =>
+      handler({ nodeId: '1:1', fontSize: 40, ...extra });
+    await expect(run({ leadingTrim: 'ALL' })).rejects.toThrow(/leadingTrim/);
+    await expect(run({ listSpacing: -2 })).rejects.toThrow(/listSpacing/);
+    await expect(run({ hangingList: 'yes' })).rejects.toThrow(/hangingList/);
+    await expect(run({ textDecorationStyle: 'DOUBLE' })).rejects.toThrow(/textDecorationStyle/);
+    await expect(run({ textDecorationOffset: { unit: 'PIXELS' } })).rejects.toThrow(
+      /numeric value/,
+    );
+    await expect(run({ textDecorationColor: { r: 1 } })).rejects.toThrow(/AUTO/);
+    expect(node).not.toHaveProperty('fontSize');
+  });
+
+  it('refuses them on text on a path, which has no lines or paragraphs', async () => {
+    const path = { ...makeText(), type: 'TEXT_PATH' };
+    await expect(
+      createSetTextPropertiesHandler(fakeFigma(path))({ nodeId: '1:1', leadingTrim: 'CAP_HEIGHT' }),
+    ).rejects.toThrow(/text on a path.*leadingTrim/s);
+  });
+});

@@ -1,10 +1,16 @@
 import { z } from 'zod';
 
+const componentDocumentation = {
+  descriptionMarkdown: z.string().optional(),
+  documentationLinks: z.array(z.object({ uri: z.string() })).optional(),
+};
+
 export const SerializedComponentInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
   key: z.string(),
   description: z.string(),
+  ...componentDocumentation,
   parentId: z.string().nullable(),
   /** Variant assignments for a component inside a set, e.g. { Size: "Large", State: "Hover" }. */
   variantProperties: z.record(z.string(), z.string()).optional(),
@@ -12,6 +18,7 @@ export const SerializedComponentInfoSchema = z.object({
 export type SerializedComponentInfo = z.infer<typeof SerializedComponentInfoSchema>;
 
 export const SerializedComponentSetInfoSchema = z.object({
+  ...componentDocumentation,
   id: z.string(),
   name: z.string(),
   key: z.string(),
@@ -45,11 +52,22 @@ export const ComponentPropertyApiEntrySchema = z.object({
     .array(z.object({ type: z.enum(['COMPONENT', 'COMPONENT_SET']), key: z.string() }))
     .optional(),
   description: z.string().optional(),
+  slotSettings: z
+    .object({
+      stretchChildOnInsert: z.boolean().optional(),
+      displayEmptyByDefault: z.boolean().optional(),
+      minChildren: z.number().nullable().optional(),
+      maxChildren: z.number().nullable().optional(),
+      allowPreferredValuesOnly: z.boolean().optional(),
+    })
+    .optional(),
 });
 export type ComponentPropertyApiEntry = z.infer<typeof ComponentPropertyApiEntrySchema>;
 
 /** Result of get_component_api: a resolved component/set and its full, verbatim-keyed property API. */
 export const GetComponentApiResultSchema = z.object({
+  ...componentDocumentation,
+  description: z.string().optional(),
   /** The resolved component / component set id (an instance resolves to its main component / set). */
   id: z.string(),
   name: z.string(),

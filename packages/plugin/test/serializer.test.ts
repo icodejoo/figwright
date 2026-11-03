@@ -31,6 +31,30 @@ const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   }) as unknown as SceneNode;
 
 describe('serializeFlat', () => {
+  it('reads nondefault instance scale factors and native Slot violations/references', () => {
+    expect(serializeFlatSync(fake({ type: 'INSTANCE', scaleFactor: 2 }))).toHaveProperty(
+      'scaleFactor',
+      2,
+    );
+    expect(serializeFlatSync(fake({ type: 'INSTANCE', scaleFactor: 1 }))).not.toHaveProperty(
+      'scaleFactor',
+    );
+    expect(
+      serializeFlatSync(
+        fake({
+          type: 'SLOT',
+          limitViolations: ['BELOW_MIN', 'HAS_NON_PREFERRED'],
+          componentPropertyReferences: { slotContentId: 'Content#1' },
+        }),
+      ),
+    ).toMatchObject({
+      limitViolations: ['BELOW_MIN', 'HAS_NON_PREFERRED'],
+      componentPropertyReferences: { slotContentId: 'Content#1' },
+    });
+    expect(serializeFlatSync(fake({ type: 'SLOT', limitViolations: [] }))).not.toHaveProperty(
+      'limitViolations',
+    );
+  });
   // Measured: Figma draws a background blur only behind a node with some visible fill. With none,
   // a hidden one, or only fully transparent ones it draws nothing, while a CSS backdrop-filter
   // would still blur; at 1% opacity, or a gradient with any non-transparent stop, it blurs the
@@ -2916,5 +2940,87 @@ describe('Figma Draw nodes', () => {
     });
     expect(out).not.toHaveProperty('complexStrokeProperties');
     expect(out).not.toHaveProperty('renderBounds');
+  });
+});
+
+describe('serializeFlatSync rarer text settings', () => {
+  const plain = {
+    type: 'TEXT',
+    characters: 'Label',
+    fontSize: 14,
+    fontName: { family: 'Inter', style: 'Regular' },
+    textCase: 'ORIGINAL',
+    textDecoration: 'NONE',
+    getStyledTextSegments: () => [],
+  };
+
+  it('emits each one only off its default', () => {
+    const out = serializeFlatSync(
+      fake({
+        ...plain,
+        textDecoration: 'UNDERLINE',
+        leadingTrim: 'CAP_HEIGHT',
+        listSpacing: 6,
+        hangingPunctuation: true,
+        hangingList: true,
+        textDecorationStyle: 'WAVY',
+        textDecorationOffset: { unit: 'PIXELS', value: 3 },
+        textDecorationThickness: { unit: 'PERCENT', value: 8 },
+        textDecorationColor: { value: { type: 'SOLID', color: { r: 1, g: 0, b: 0 } } },
+        textDecorationSkipInk: false,
+        openTypeFeatures: { TNUM: true, LIGA: false },
+      }),
+    );
+    expect(out).toMatchObject({
+      leadingTrim: 'CAP_HEIGHT',
+      listSpacing: 6,
+      hangingPunctuation: true,
+      hangingList: true,
+      textDecorationStyle: 'WAVY',
+      textDecorationOffset: { unit: 'PIXELS', value: 3 },
+      textDecorationThickness: { unit: 'PERCENT', value: 8 },
+      textDecorationColor: '#FF0000',
+      textDecorationSkipInk: false,
+      openTypeFeatures: { TNUM: true, LIGA: false },
+    });
+  });
+
+  it('adds no key to plain text, nor to an underline left at its defaults', () => {
+    const before = Object.keys(serializeFlatSync(fake(plain))).toSorted();
+    const defaults = {
+      ...plain,
+      leadingTrim: 'NONE',
+      listSpacing: 0,
+      hangingPunctuation: false,
+      hangingList: false,
+      openTypeFeatures: {},
+    };
+    expect(Object.keys(serializeFlatSync(fake(defaults))).toSorted()).toEqual(before);
+    const underlined = {
+      ...defaults,
+      textDecoration: 'UNDERLINE',
+      textDecorationStyle: 'SOLID',
+      textDecorationOffset: { unit: 'AUTO' },
+      textDecorationThickness: { unit: 'AUTO' },
+      textDecorationColor: { value: 'AUTO' },
+      textDecorationSkipInk: true,
+    };
+    expect(Object.keys(serializeFlatSync(fake(underlined))).toSorted()).toEqual(before);
+  });
+
+  it('leaves out a mixed value rather than guessing one', () => {
+    const mixed = Symbol('figma.mixed');
+    const out = serializeFlatSync(
+      fake({
+        ...plain,
+        leadingTrim: mixed,
+        listSpacing: mixed,
+        textDecorationStyle: mixed,
+        openTypeFeatures: mixed,
+      }),
+    );
+    for (const key of ['leadingTrim', 'listSpacing', 'textDecorationStyle', 'openTypeFeatures']) {
+      expect(out).not.toHaveProperty(key);
+    }
   });
 });

@@ -3,6 +3,13 @@ import type { MutateResult, SerializedLineHeight, SerializedPaint } from '@figwr
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaPaintsBound } from './bindings.js';
 import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
+import {
+  assertBoolean,
+  assertDecorationStyle,
+  assertNonNegative,
+  toDecorationColor,
+  toDecorationMetric,
+} from './text-detail.js';
 import { isTextLike, NOT_ON_A_PATH, unsupportedOnPath } from './text-like.js';
 
 interface RangeInput {
@@ -12,6 +19,14 @@ interface RangeInput {
   fontSize?: number;
   fills?: SerializedPaint[];
   textDecoration?: string;
+  textDecorationStyle?: string;
+  textDecorationOffset?: unknown;
+  textDecorationThickness?: unknown;
+  textDecorationColor?: unknown;
+  textDecorationSkipInk?: boolean;
+  paragraphSpacing?: number;
+  paragraphIndent?: number;
+  listSpacing?: number;
   textCase?: string;
   lineHeight?: SerializedLineHeight;
   letterSpacing?: { unit: string; value: number };
@@ -22,6 +37,18 @@ interface RangeInput {
   textStyleId?: string;
   fillStyleId?: string;
   boundVariables?: Record<string, string | null>;
+}
+
+/** The rarer per-run values of one range, converted and validated before any write. */
+interface RangeDetails {
+  style?: TextDecorationStyle;
+  offset?: TextDecorationOffset;
+  thickness?: TextDecorationThickness;
+  color?: TextDecorationColor;
+  skipInk?: boolean;
+  paragraphSpacing?: number;
+  paragraphIndent?: number;
+  listSpacing?: number;
 }
 
 /**
@@ -73,6 +100,41 @@ export const createSetTextRangeHandler =
     // Every per-run setter used below exists on both node types; the ones a path lacks were
     // refused above.
     const text = node as TextNode;
+    // The rarer fields are converted once, up front, so a malformed one fails before any range
+    // mutates; the converted value is what the write loop below reuses.
+    const details = new Map<RangeInput, RangeDetails>();
+    for (const [i, r] of ranges.entries()) {
+      const at = `set_text_range: ranges[${i}]`;
+      const d: RangeDetails = {};
+      if (r.textDecorationStyle !== undefined) {
+        d.style = assertDecorationStyle(r.textDecorationStyle, `${at}.textDecorationStyle`);
+      }
+      if (r.textDecorationOffset !== undefined) {
+        d.offset = toDecorationMetric(r.textDecorationOffset, `${at}.textDecorationOffset`);
+      }
+      if (r.textDecorationThickness !== undefined) {
+        d.thickness = toDecorationMetric(
+          r.textDecorationThickness,
+          `${at}.textDecorationThickness`,
+        );
+      }
+      if (r.textDecorationColor !== undefined) {
+        d.color = toDecorationColor(figmaCtx, r.textDecorationColor, `${at}.textDecorationColor`);
+      }
+      if (r.textDecorationSkipInk !== undefined) {
+        d.skipInk = assertBoolean(r.textDecorationSkipInk, `${at}.textDecorationSkipInk`);
+      }
+      if (r.paragraphSpacing !== undefined) {
+        d.paragraphSpacing = assertNonNegative(r.paragraphSpacing, `${at}.paragraphSpacing`);
+      }
+      if (r.paragraphIndent !== undefined) {
+        d.paragraphIndent = assertNonNegative(r.paragraphIndent, `${at}.paragraphIndent`);
+      }
+      if (r.listSpacing !== undefined) {
+        d.listSpacing = assertNonNegative(r.listSpacing, `${at}.listSpacing`);
+      }
+      details.set(r, d);
+    }
     // Validate every range up front so a bad range fails before any partial mutation.
     for (const r of ranges) {
       if (typeof r.start !== 'number' || typeof r.end !== 'number') {
@@ -134,6 +196,21 @@ export const createSetTextRangeHandler =
       if (r.textDecoration !== undefined) {
         text.setRangeTextDecoration(start, end, r.textDecoration as TextDecoration);
       }
+      // The underline details follow the decoration itself, so a run that is underlined and styled
+      // in one range finds the underline already in place.
+      const d = details.get(r)!;
+      if (d.style !== undefined) text.setRangeTextDecorationStyle(start, end, d.style);
+      if (d.offset !== undefined) text.setRangeTextDecorationOffset(start, end, d.offset);
+      if (d.thickness !== undefined) text.setRangeTextDecorationThickness(start, end, d.thickness);
+      if (d.color !== undefined) text.setRangeTextDecorationColor(start, end, d.color);
+      if (d.skipInk !== undefined) text.setRangeTextDecorationSkipInk(start, end, d.skipInk);
+      if (d.paragraphSpacing !== undefined) {
+        text.setRangeParagraphSpacing(start, end, d.paragraphSpacing);
+      }
+      if (d.paragraphIndent !== undefined) {
+        text.setRangeParagraphIndent(start, end, d.paragraphIndent);
+      }
+      if (d.listSpacing !== undefined) text.setRangeListSpacing(start, end, d.listSpacing);
       if (r.textCase !== undefined) text.setRangeTextCase(start, end, r.textCase as TextCase);
       if (r.lineHeight !== undefined) {
         text.setRangeLineHeight(start, end, toFigmaLineHeight(r.lineHeight));

@@ -41,6 +41,32 @@ const fakeFigma = (lookup: Record<string, unknown>): typeof figma =>
   ({ getNodeByIdAsync: async (id: string) => lookup[id] ?? null }) as unknown as typeof figma;
 
 describe('get_component_api handler', () => {
+  it('reads component documentation and SLOT settings without emitting empty metadata', async () => {
+    const node = {
+      ...standalone,
+      description: 'Usage',
+      descriptionMarkdown: '**Usage**',
+      documentationLinks: [{ uri: 'https://example.com' }],
+      componentPropertyDefinitions: {
+        'Content#1': {
+          type: 'SLOT',
+          defaultValue: '',
+          description: 'Content',
+          slotSettings: { minChildren: null, maxChildren: 3 },
+        },
+      },
+    };
+    const result = await createGetComponentApiHandler(fakeFigma({ c: node }))({ nodeId: 'c' });
+    expect(result).toMatchObject({
+      description: 'Usage',
+      descriptionMarkdown: '**Usage**',
+      documentationLinks: [{ uri: 'https://example.com' }],
+      properties: { 'Content#1': { slotSettings: { minChildren: null, maxChildren: 3 } } },
+    });
+    const empty = await createGetComponentApiHandler(fakeFigma({ c: standalone }))({ nodeId: 'c' });
+    expect(empty).not.toHaveProperty('descriptionMarkdown');
+    expect(empty).not.toHaveProperty('documentationLinks');
+  });
   it('returns a component set property API keyed verbatim', async () => {
     const result = (await createGetComponentApiHandler(fakeFigma({ 'CS:1': set }))({
       nodeId: 'CS:1',
