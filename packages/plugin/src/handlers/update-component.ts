@@ -2,7 +2,8 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 
 /**
  * Whether the text parses as an absolute URL. The plugin sandbox is not guaranteed to have the URL
- * global, so without it fall back to a scheme-and-no-whitespace check.
+ * global (measured: absent), so without it fall back to a scheme-and-no-whitespace check. The `//`
+ * is not required: mailto: and tel: links are absolute URIs too, and Figma has the final say.
  */
 const isAbsoluteUrl = (uri: string): boolean => {
   if (typeof URL === 'function') {
@@ -12,7 +13,7 @@ const isAbsoluteUrl = (uri: string): boolean => {
       return false;
     }
   }
-  return /^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(uri);
+  return /^[a-z][a-z0-9+.-]*:\S+$/i.test(uri);
 };
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));

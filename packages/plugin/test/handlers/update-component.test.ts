@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { componentDocumentation } from '../../src/handlers/component-documentation.js';
 import { createUpdateComponentHandler } from '../../src/handlers/update-component.js';
@@ -82,6 +82,28 @@ describe('update_component', () => {
       handler({ componentId: 'c', description: 'x', documentationLinks: [{ uri: 'not a url' }] }),
     ).rejects.toThrow(/not a valid URL/);
     expect(node.description).toBe('keep');
+  });
+  it('without the URL global, accepts scheme-only links such as mailto: and still refuses spaces', async () => {
+    vi.stubGlobal('URL', undefined);
+    try {
+      const node = {
+        id: 'c',
+        type: 'COMPONENT',
+        remote: false,
+        description: '',
+        documentationLinks: [],
+      };
+      const handler = createUpdateComponentHandler({
+        getNodeByIdAsync: async () => node,
+      } as unknown as typeof figma);
+      await handler({ componentId: 'c', documentationLinks: [{ uri: 'mailto:a@b.com' }] });
+      expect(node.documentationLinks).toEqual([{ uri: 'mailto:a@b.com' }]);
+      await expect(
+        handler({ componentId: 'c', documentationLinks: [{ uri: 'not a url' }] }),
+      ).rejects.toThrow(/not a valid URL/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
   it('emits descriptionMarkdown only when it differs from description', () => {
     const doc = (description: string, descriptionMarkdown: string) =>
