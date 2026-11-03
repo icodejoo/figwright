@@ -1,6 +1,7 @@
 import type { ComponentPropertyApiEntry, GetComponentApiResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { readExposure } from '../exposure.js';
 
 /**
  * Resolve a node to the one that owns the full property contract: a COMPONENT_SET as-is, a
@@ -64,5 +65,9 @@ export const createGetComponentApiHandler =
       type: target.type,
       properties,
     };
+    if ('visible' in node) {
+      const { exposedInstances } = readExposure(node);
+      if (exposedInstances !== undefined) result.exposedInstances = exposedInstances;
+    }
     return result;
   };

@@ -294,6 +294,8 @@ export interface DesignContextNode {
    */
   motion?: MotionSummary;
   mainComponent?: SerializedMainComponent;
+  isExposedInstance?: true;
+  exposedInstances?: string[];
   mainComponentId?: string;
   /**
    * GlobalVars refs (P3): when style dedup runs (full detail), inline `fills` / `strokes` /
@@ -489,6 +491,8 @@ export const DesignContextNodeSchema = z.lazy(() =>
       })
       .optional(),
     mainComponent: SerializedMainComponentSchema.optional(),
+    isExposedInstance: z.literal(true).optional(),
+    exposedInstances: z.array(z.string()).optional(),
     mainComponentId: z.string().optional(),
     fill: z.string().optional(),
     stroke: z.string().optional(),
@@ -680,6 +684,8 @@ const CONTENT_FIELDS = [
   'textOverrides',
   // Which variant an instance renders — an INSTANCE without its props is not buildable.
   'componentProperties',
+  'isExposedInstance',
+  'exposedInstances',
   // The mirror of the above on the definition side: which property drives a sublayer. A downgrade
   // still generates component structure, and without this the generated component has no props at
   // all — a prop-driven string becomes a literal and a BOOLEAN-gated layer becomes unconditional.

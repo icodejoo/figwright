@@ -41,6 +41,13 @@ const fakeFigma = (lookup: Record<string, unknown>): typeof figma =>
   ({ getNodeByIdAsync: async (id: string) => lookup[id] ?? null }) as unknown as typeof figma;
 
 describe('get_component_api handler', () => {
+  it('reports exposure ids for the requested instance, not its resolved property owner', async () => {
+    const node = { ...instance, visible: true, exposedInstances: [{ id: 'nested' }] };
+    const result = await createGetComponentApiHandler(fakeFigma({ 'I:1': node }))({
+      nodeId: 'I:1',
+    });
+    expect(result).toMatchObject({ id: 'CS:1', exposedInstances: ['nested'] });
+  });
   it('returns a component set property API keyed verbatim', async () => {
     const result = (await createGetComponentApiHandler(fakeFigma({ 'CS:1': set }))({
       nodeId: 'CS:1',

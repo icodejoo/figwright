@@ -274,7 +274,20 @@ const textOnPath = base({
   textPathStartData: { segment: 1, position: 0.5 },
 });
 
-const FIXTURES = [frameInGrid, arcWithConstraints, richText, drawnStroke, repeatGroup, textOnPath];
+const exposed = base({
+  type: 'INSTANCE',
+  isExposedInstance: true,
+  exposedInstances: [{ id: 'nested' }],
+});
+const FIXTURES = [
+  frameInGrid,
+  arcWithConstraints,
+  richText,
+  drawnStroke,
+  repeatGroup,
+  textOnPath,
+  exposed,
+];
 
 // SerializedNodeSchema is exported as a recursive z.lazy — unwrap to the inner object for keys.
 const schemaKeys = Object.keys(

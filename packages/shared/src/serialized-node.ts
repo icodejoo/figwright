@@ -735,6 +735,10 @@ export interface SerializedNode {
   // instance variant / props + which component it instantiates
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   mainComponent?: SerializedMainComponent;
+  /** Present only when this instance is exposed to its containing component. */
+  isExposedInstance?: true;
+  /** Exposed nested instance ids, only when the API provides a nonempty list. */
+  exposedInstances?: string[];
   /**
    * Which component property drives this layer — present only on a sublayer inside a COMPONENT or
    * an INSTANCE, keyed by the field the property controls. The value is the property name carrying
@@ -874,6 +878,8 @@ export const SerializedNodeSchema = z.lazy(() =>
     explicitVariableModes: z.record(z.string(), z.string()).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
     mainComponent: SerializedMainComponentSchema.optional(),
+    isExposedInstance: z.literal(true).optional(),
+    exposedInstances: z.array(z.string()).optional(),
     componentPropertyReferences: z
       .object({
         visible: z.string().optional(),

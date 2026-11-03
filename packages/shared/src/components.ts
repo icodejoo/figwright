@@ -56,5 +56,7 @@ export const GetComponentApiResultSchema = z.object({
   type: z.string(),
   /** Property name (verbatim, ready to pass to set_instance_properties) → its definition. */
   properties: z.record(z.string(), ComponentPropertyApiEntrySchema),
+  /** For the requested node (not the resolved property owner), when provided by the API. */
+  exposedInstances: z.array(z.string()).optional(),
 });
 export type GetComponentApiResult = z.infer<typeof GetComponentApiResultSchema>;
