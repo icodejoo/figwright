@@ -1,4 +1,5 @@
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { perfFor } from '../perf.js';
 import { resultCharBudget, serializeFlatNodes, toNodeListResult } from '../serializer.js';
 import { collectMatches, resolveScope } from '../traverse.js';
 
@@ -61,6 +62,10 @@ export const createSearchNodesHandler =
         (wantType === null || node.type === wantType) &&
         (needle === null || node.name.toLowerCase().includes(needle)) &&
         hasData(node),
+      perfFor(figmaCtx),
     );
-    return toNodeListResult(matches, await serializeFlatNodes(matches, resultCharBudget()));
+    return toNodeListResult(
+      matches,
+      await serializeFlatNodes(matches, resultCharBudget(), perfFor(figmaCtx)),
+    );
   };

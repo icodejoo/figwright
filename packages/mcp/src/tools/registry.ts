@@ -89,6 +89,7 @@ import { lockNodesTool } from './lock-nodes.js';
 import { moveNodesTool } from './move-nodes.js';
 import { navigateToPageTool } from './navigate-to-page.js';
 import { outlineStrokeTool } from './outline-stroke.js';
+import { getPerfStatsTool, loadPageTool } from './perf.js';
 import { pingTool } from './ping.js';
 import { removeAnimationStyleTool } from './remove-animation-style.js';
 import { removeManualKeyframeTrackTool } from './remove-manual-keyframe-track.js';
@@ -180,6 +181,8 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   getExportSettingsTool,
   getPluginDataTool,
   searchNodesTool,
+  getPerfStatsTool,
+  loadPageTool,
   scanTextNodesTool,
   scanNodesByTypesTool,
   getStylesTool,

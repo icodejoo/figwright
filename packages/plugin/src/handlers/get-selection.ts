@@ -1,6 +1,7 @@
 import type { GetSelectionResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { perfFor } from '../perf.js';
 import { RESULT_LIMIT_LABEL, resultCharBudget, serializeFlatNodes } from '../serializer.js';
 
 export const createGetSelectionHandler =
@@ -8,7 +9,7 @@ export const createGetSelectionHandler =
   async () => {
     const page = figmaCtx.currentPage;
     const selection = page.selection;
-    const run = await serializeFlatNodes(selection, resultCharBudget());
+    const run = await serializeFlatNodes(selection, resultCharBudget(), perfFor(figmaCtx));
     // Refused rather than cut: the selection is the caller's statement of what to work on, and a
     // part of it would read as all of it.
     if (!run.complete) {

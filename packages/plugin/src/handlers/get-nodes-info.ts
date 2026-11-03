@@ -1,6 +1,7 @@
 import type { GetNodesInfoResult, SerializedNode } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { perfFor } from '../perf.js';
 import { RESULT_LIMIT_LABEL, resultCharBudget, serializeTrees } from '../serializer.js';
 
 const isSceneNode = (node: BaseNode): node is SceneNode =>
@@ -21,7 +22,7 @@ export const createGetNodesInfoHandler =
       ids.map(async id => {
         const node = await figmaCtx.getNodeByIdAsync(id);
         if (node === null || !isSceneNode(node)) return null;
-        return { id, run: await serializeTrees([node], budget) };
+        return { id, run: await serializeTrees([node], budget, perfFor(figmaCtx)) };
       }),
     );
     if (runs.some(entry => entry !== null && !entry.run.complete)) {

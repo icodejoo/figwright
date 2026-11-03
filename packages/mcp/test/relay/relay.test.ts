@@ -43,6 +43,7 @@ afterEach(async () => {
 
 const startRelay = async (
   overrides: {
+    serverVersion?: string;
     heartbeatIntervalMs?: number;
     heartbeatMaxMisses?: number;
     disconnectGraceMs?: number;
@@ -52,7 +53,7 @@ const startRelay = async (
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
   const port = (server.address() as AddressInfo).port;
   const relay = new Relay({
-    serverVersion: '1.0.0',
+    serverVersion: overrides.serverVersion ?? '1.0.0',
     server,
     heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? 60_000,
     heartbeatMaxMisses: overrides.heartbeatMaxMisses ?? 2,
@@ -384,6 +385,32 @@ describe('Relay hello loop', () => {
     ).rejects.toThrow(/timeout/i);
 
     expect(attributed).toMatch(/older than this server/i);
+    ws.close();
+  });
+
+  it.each(['0.7.0', '0.8.0'])('0.8.0 server attributes skew for plugin %s', async clientVersion => {
+    const b = await startRelay({ serverVersion: '0.8.0' });
+    const ws = await connect(b.port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'version-pin',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion }),
+        }),
+      ),
+    );
+    const response = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+    const [session] = b.relay.sessions.connected();
+    const versionNotice = expect.stringContaining('v0.8.0');
+    expect((response.result as HelloResult).skewNotice).toEqual(
+      clientVersion === '0.7.0' ? versionNotice : undefined,
+    );
+    const unverifiedNotice = expect.stringContaining('unverified');
+    expect(b.relay.skewNotice(session?.id)).toEqual(
+      clientVersion === '0.7.0' ? unverifiedNotice : null,
+    );
     ws.close();
   });
 

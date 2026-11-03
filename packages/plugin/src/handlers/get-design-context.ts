@@ -16,6 +16,7 @@ import {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { measureStage, perfFor } from '../perf.js';
 import { inheritRepeat, serializeCodeSyntax, serializeFlatSync } from '../serializer.js';
 import { displayP3Marker } from './color-profile.js';
 
@@ -901,7 +902,9 @@ export const createGetDesignContextHandler =
       if (total > DESIGN_CONTEXT_BAIL_NODES) return sectionPlanResult(roots, total);
     }
 
-    const nodes = await Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx)));
+    const nodes = await measureStage(perfFor(figmaCtx), 'serializationMs', () =>
+      Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx))),
+    );
     // Only P3 changes what a colour means; an sRGB or unmanaged file's hex is already what CSS reads.
     const result: GetDesignContextResult = { ...displayP3Marker(figmaCtx), nodes };
 

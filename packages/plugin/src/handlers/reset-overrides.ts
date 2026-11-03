@@ -1,5 +1,6 @@
 import { TimeSlice } from '../cooperative.js';
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { perfFor } from '../perf.js';
 
 /* eslint-disable no-await-in-loop -- reset parents before reading children; yield between slices */
 
@@ -12,7 +13,7 @@ export const createResetOverridesHandler =
       throw new Error(`reset_overrides: ${p.instanceId} is not an INSTANCE`);
     const stack: SceneNode[] = [node];
     const resetInstanceIds: string[] = [];
-    const slice = new TimeSlice();
+    const slice = new TimeSlice(perfFor(figmaCtx));
     while (stack.length > 0) {
       const next = stack.pop()!;
       if (next.type === 'INSTANCE') {

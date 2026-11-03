@@ -226,3 +226,5 @@ animation is a fidelity miss, the same class as dropping a shadow.
 - Never write a config file or wizard prompt; everything is inferred from the project + the tools.
 
 Paint blendMode is the paint’s own compositing mode. Image/video filters retain non-default adjustments; rotation is reported for TILE/FILL/FIT and scalingFactor only for TILE; filtersApplied still means original bytes need the composited export to preserve grading.
+
+For slow reads, enable recording with `get_perf_stats({ enabled: true })`, reproduce, then inspect `get_perf_stats` and preload pages with `load_page`.

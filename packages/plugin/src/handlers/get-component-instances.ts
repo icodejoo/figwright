@@ -1,5 +1,6 @@
 import { TimeSlice } from '../cooperative.js';
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { perfFor } from '../perf.js';
 import { consumerLimit, consumerLocation } from './consumer-location.js';
 
 /* eslint-disable no-await-in-loop -- bound native lookups and yield cooperatively between results */
@@ -17,7 +18,7 @@ export const createGetComponentInstancesHandler =
     }
     await figmaCtx.loadAllPagesAsync();
     const components = node.type === 'COMPONENT' ? [node] : node.children;
-    const slice = new TimeSlice();
+    const slice = new TimeSlice(perfFor(figmaCtx));
     const instances: (Awaited<ReturnType<typeof consumerLocation>> & { componentId: string })[] =
       [];
     const seen = new Set<string>();

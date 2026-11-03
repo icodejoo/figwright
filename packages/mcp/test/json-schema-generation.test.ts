@@ -44,6 +44,11 @@ interface Canary {
 }
 
 const CANARIES: Canary[] = [
+  {
+    what: 'bounded integer with a default',
+    schema: z.number().int().min(1).max(200).default(50),
+    json: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+  },
   { what: 'string', schema: z.string(), json: { type: 'string' } },
   {
     what: 'described string',

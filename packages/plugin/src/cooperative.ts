@@ -1,3 +1,4 @@
+import { createHostYield, parseHostYield } from '../protocol/host-yield.js';
 // The sandbox runs on Figma's main thread: while a handler computes, the editor cannot repaint and
 // no other message — another tool call, the UI's reply channel — is delivered. A long read therefore
 // hands the thread back between slices of work, or Figma freezes for its whole duration (measured: a
@@ -20,8 +21,7 @@
 // handoffs where nobody is watching the editor repaint, or where each handoff is expensive. Slices
 // are coarsened rather than stopped, so the host keeps getting turns and other tool calls and the
 // panel's own traffic still flow during a long read.
-
-import { createHostYield, parseHostYield } from '../protocol/host-yield.js';
+import type { PerfCall } from './perf.js';
 
 /** How long one slice may hold the thread before handing it back. */
 export const SLICE_MS = 40;
@@ -79,6 +79,7 @@ export const resumeHostYield = (raw: unknown): boolean => {
 /** Tracks how long the current slice has run; `due()` says it is time to yield. */
 export class TimeSlice {
   private start = Date.now();
+  constructor(private readonly perf?: PerfCall) {}
 
   due(): boolean {
     const now = Date.now();
@@ -88,7 +89,14 @@ export class TimeSlice {
 
   async yield(): Promise<void> {
     const before = Date.now();
-    await yieldToHost();
+    try {
+      await yieldToHost();
+    } finally {
+      if (this.perf) {
+        this.perf.yieldCount += 1;
+        this.perf.yieldMs += Date.now() - before;
+      }
+    }
     const after = Date.now();
     if (after - before >= THROTTLED_YIELD_MS) throttledUntil = after + THROTTLED_BACKOFF_MS;
     this.start = after;

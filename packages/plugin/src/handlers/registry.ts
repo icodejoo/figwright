@@ -1,6 +1,7 @@
 import type { SandboxHandlers } from '../dispatcher.js';
 import { createIdempotencyCache, idempotent } from '../idempotency.js';
 import { withInstanceIdLookup } from '../node-lookup.js';
+import { perfStats } from '../perf.js';
 import { createAddComponentPropertyHandler } from './add-component-property.js';
 import { createAddPageHandler } from './add-page.js';
 import { createAddVariableModeHandler } from './add-variable-mode.js';
@@ -75,6 +76,7 @@ import { createImportStyleHandler } from './import-style.js';
 import { createImportSvgHandler } from './import-svg.js';
 import { createImportVariableHandler } from './import-variable.js';
 import { createListFilesHandler } from './list-files.js';
+import { createLoadPageHandler } from './load-page.js';
 import { createSetLockedHandler } from './lock-nodes.js';
 import { createMoveNodesHandler } from './move-nodes.js';
 import { createNavigateToPageHandler } from './navigate-to-page.js';
@@ -155,9 +157,12 @@ import {
  * Wiring lives here (not in code.ts) so a registry test can enumerate the keys and assert they
  * match the server's advertised tools — a new tool can't be half-wired without a test failing.
  */
-export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers => {
-  const figmaCtx = withInstanceIdLookup(figmaApi);
-  const cache = createIdempotencyCache();
+export const createSandboxHandlers = (
+  figmaApi: typeof figma,
+  cache = createIdempotencyCache(),
+  lookupState = { byIdRejected: false },
+): SandboxHandlers => {
+  const figmaCtx = withInstanceIdLookup(figmaApi, lookupState);
 
   const rawWrites: SandboxHandlers = {
     set_fills: createSetFillsHandler(figmaCtx),
@@ -283,6 +288,8 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
   };
 
   const handlers: SandboxHandlers = {
+    get_perf_stats: params => perfStats((params ?? {}) as Parameters<typeof perfStats>[0]),
+    load_page: createLoadPageHandler(figmaCtx),
     get_component_instances: createGetComponentInstancesHandler(figmaCtx),
     get_style_consumers: createGetStyleConsumersHandler(figmaCtx),
     ping: createPingHandler(figmaCtx),

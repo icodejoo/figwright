@@ -1,4 +1,5 @@
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { perfFor } from '../perf.js';
 import { resultCharBudget, serializeFlatNodes, toNodeListResult } from '../serializer.js';
 import { collectMatches, resolveScope } from '../traverse.js';
 
@@ -12,6 +13,10 @@ export const createScanTextNodesHandler =
     const matches = await collectMatches(
       scope,
       node => node.type === 'TEXT' || node.type === 'TEXT_PATH',
+      perfFor(figmaCtx),
     );
-    return toNodeListResult(matches, await serializeFlatNodes(matches, resultCharBudget()));
+    return toNodeListResult(
+      matches,
+      await serializeFlatNodes(matches, resultCharBudget(), perfFor(figmaCtx)),
+    );
   };

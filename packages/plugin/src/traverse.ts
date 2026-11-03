@@ -1,4 +1,5 @@
 import { TimeSlice } from './cooperative.js';
+import { measureStage, type PerfCall } from './perf.js';
 
 const isSceneNode = (node: BaseNode): node is SceneNode =>
   node.type !== 'DOCUMENT' && node.type !== 'PAGE';
@@ -35,22 +36,24 @@ export function* walk(nodes: readonly SceneNode[]): Generator<SceneNode> {
 export const collectMatches = async (
   nodes: readonly SceneNode[],
   match: (node: SceneNode) => boolean,
-): Promise<SceneNode[]> => {
-  const out: SceneNode[] = [];
-  const stack = nodes.toReversed();
-  const slice = new TimeSlice();
-  while (stack.length > 0) {
-    const node = stack.pop()!;
-    if (match(node)) out.push(node);
-    const children = childrenOf(node);
-    if (children !== null) {
-      for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]!);
+  perf?: PerfCall,
+): Promise<SceneNode[]> =>
+  measureStage(perf, 'traversalMs', async () => {
+    const out: SceneNode[] = [];
+    const stack = nodes.toReversed();
+    const slice = new TimeSlice(perf);
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (match(node)) out.push(node);
+      const children = childrenOf(node);
+      if (children !== null) {
+        for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]!);
+      }
+      // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
+      if (stack.length > 0 && slice.due()) await slice.yield();
     }
-    // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
-    if (stack.length > 0 && slice.due()) await slice.yield();
-  }
-  return out;
-};
+    return out;
+  });
 
 /**
  * A forest flattened into pre-order, with each node's parent position (-1 for a root) and whether
@@ -63,29 +66,33 @@ export interface FlatForest {
   hasChildren: boolean[];
 }
 
-export const flattenForest = async (roots: readonly SceneNode[]): Promise<FlatForest> => {
-  const forest: FlatForest = { nodes: [], parents: [], hasChildren: [] };
-  const stack: Array<{ node: SceneNode; parent: number }> = roots
-    .map(node => ({ node, parent: -1 }))
-    .toReversed();
-  const slice = new TimeSlice();
-  while (stack.length > 0) {
-    const { node, parent } = stack.pop()!;
-    const index = forest.nodes.length;
-    forest.nodes.push(node);
-    forest.parents.push(parent);
-    const children = childrenOf(node);
-    forest.hasChildren.push(children !== null);
-    if (children !== null) {
-      for (let i = children.length - 1; i >= 0; i -= 1) {
-        stack.push({ node: children[i]!, parent: index });
+export const flattenForest = async (
+  roots: readonly SceneNode[],
+  perf?: PerfCall,
+): Promise<FlatForest> =>
+  measureStage(perf, 'traversalMs', async () => {
+    const forest: FlatForest = { nodes: [], parents: [], hasChildren: [] };
+    const stack: Array<{ node: SceneNode; parent: number }> = roots
+      .map(node => ({ node, parent: -1 }))
+      .toReversed();
+    const slice = new TimeSlice(perf);
+    while (stack.length > 0) {
+      const { node, parent } = stack.pop()!;
+      const index = forest.nodes.length;
+      forest.nodes.push(node);
+      forest.parents.push(parent);
+      const children = childrenOf(node);
+      forest.hasChildren.push(children !== null);
+      if (children !== null) {
+        for (let i = children.length - 1; i >= 0; i -= 1) {
+          stack.push({ node: children[i]!, parent: index });
+        }
       }
+      // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
+      if (stack.length > 0 && slice.due()) await slice.yield();
     }
-    // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
-    if (stack.length > 0 && slice.due()) await slice.yield();
-  }
-  return forest;
-};
+    return forest;
+  });
 
 /**
  * Resolve the `root` param of a traversal tool to the forest to walk.

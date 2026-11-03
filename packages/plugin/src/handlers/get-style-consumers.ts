@@ -1,5 +1,6 @@
 import { TimeSlice } from '../cooperative.js';
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { perfFor } from '../perf.js';
 import { consumerLimit, consumerLocation } from './consumer-location.js';
 
 /* eslint-disable no-await-in-loop -- cooperate while projecting a potentially large consumer list */
@@ -13,7 +14,7 @@ export const createGetStyleConsumersHandler =
     if (style === null) throw new Error(`get_style_consumers: style ${p.styleId} not found`);
     await figmaCtx.loadAllPagesAsync();
     const found = await style.getStyleConsumersAsync();
-    const slice = new TimeSlice();
+    const slice = new TimeSlice(perfFor(figmaCtx));
     const consumers = [];
     for (const consumer of found) {
       if (consumers.length === limit) break;

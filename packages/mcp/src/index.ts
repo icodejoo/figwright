@@ -27,6 +27,7 @@ import { Node, NodeRole } from './election/node.js';
 import { SERVER_INSTRUCTIONS } from './instructions.js';
 import { wireShutdown } from './lifecycle.js';
 import { normalizeIdArgs } from './node-id.js';
+import { configureServerPerf, observeTool, serverPerfStats } from './perf.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { annotationsFor } from './tools/annotations.js';
@@ -227,6 +228,17 @@ const createMcpServer = (): McpServer => {
     const run: ToolHandler =
       SPECIAL_HANDLERS[spec.name] ??
       (async rawArgs => {
+        if (spec.name === 'get_perf_stats') {
+          const params = rawArgs as {
+            limit?: number;
+            tool?: string;
+            reset?: boolean;
+            enabled?: boolean;
+          };
+          const result = await dispatch(spec.name, rawArgs);
+          configureServerPerf(params.enabled);
+          return textResult({ ...(result as object), serverCalls: serverPerfStats(params) });
+        }
         // batch is the one tool the SDK cannot fully check for us: `ops[].params` is a free-form
         // record, so what each op actually asks for is never matched against the schema of the tool
         // it names. Every other tool's arguments were validated against that same schema on the way
@@ -263,12 +275,14 @@ const createMcpServer = (): McpServer => {
     // Last of all, the size net: whatever the tool built, a result past the client's message limit
     // is refused here rather than sent and losing the connection (tools/result-budget.ts).
     const handler: ToolHandler = async args =>
-      assertWithinLimit(
-        spec.name,
-        await captureNotices(
-          () => run(normalizeIdArgs(args)),
-          (result, notices) =>
-            withSkewNotice(withRoutingNotice(result, notices.routing), notices.skew),
+      observeTool(spec.name, async () =>
+        assertWithinLimit(
+          spec.name,
+          await captureNotices(
+            () => run(normalizeIdArgs(args)),
+            (result, notices) =>
+              withSkewNotice(withRoutingNotice(result, notices.routing), notices.skew),
+          ),
         ),
       );
     // The spec's own Zod object goes straight through: it is already the Standard Schema object the

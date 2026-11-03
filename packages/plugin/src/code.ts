@@ -4,7 +4,9 @@ import { parsePanelControl } from '../protocol/panel-control.js';
 import { resumeHostYield } from './cooperative.js';
 import { dispatchSandboxMessage } from './dispatcher.js';
 import { createSandboxHandlers } from './handlers/registry.js';
+import { createIdempotencyCache } from './idempotency.js';
 import { createPanelController } from './panel.js';
+import { withPerfApi } from './perf.js';
 
 const log = (msg: string): void => console.log(msg);
 
@@ -41,7 +43,9 @@ const emitContext = (): void => {
   figma.ui.postMessage(event);
 };
 
-const handlers = createSandboxHandlers(figma);
+const cache = createIdempotencyCache();
+const lookupState = { byIdRejected: false };
+const handlers = createSandboxHandlers(figma, cache, lookupState);
 
 figma.ui.onmessage = (raw: unknown) => {
   if (resumeHostYield(raw)) return;
@@ -56,6 +60,7 @@ figma.ui.onmessage = (raw: unknown) => {
     const outcome = await dispatchSandboxMessage({
       raw,
       handlers,
+      scopedHandlers: call => createSandboxHandlers(withPerfApi(figma, call), cache, lookupState),
       editorType: figma.editorType,
       log,
     });

@@ -36,6 +36,7 @@ import {
 import { readExposure } from './exposure.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
 import { boundingBoxOf, orientationOf } from './orientation.js';
+import { lookupFor, measureStage, type PerfCall } from './perf.js';
 import { cssProgressiveBlurLayers } from './progressive-blur.js';
 import { flattenForest } from './traverse.js';
 
@@ -1191,11 +1192,11 @@ const resolveMainComponent = async (
   }
 };
 
-export const serializeFlat = async (node: SceneNode): Promise<SerializedNode> => {
+export const serializeFlat = async (node: SceneNode, perf?: PerfCall): Promise<SerializedNode> => {
   const out = serializeFlatSync(node);
   const mainComponent = await resolveMainComponent(node);
   if (mainComponent !== undefined) out.mainComponent = mainComponent;
-  await inheritRepeat(node, out);
+  await inheritRepeat(node, out, perf === undefined ? undefined : lookupFor(perf));
   return out;
 };
 
@@ -1243,44 +1244,48 @@ export interface SerializedRun {
 const serializeInOrder = async (
   nodes: readonly SceneNode[],
   budget: CharBudget | null,
-): Promise<SerializedRun> => {
-  const done: SerializedNode[] = [];
-  const inFlight: Array<Promise<SerializedNode>> = [];
-  const settleOldest = async (): Promise<void> => {
-    const out = await inFlight.shift()!;
-    done.push(out);
-    // +1 for the separating comma.
-    if (budget !== null) budget.used += JSON.stringify(out).length + 1;
-  };
-  const spent = (): boolean => budget !== null && budget.used > budget.limit;
-  const abandon = (): SerializedRun => ({ nodes: done, complete: false });
-  const slice = new TimeSlice();
-  for (const node of nodes) {
-    const pending = serializeFlat(node);
-    // Marked handled up front: when the run stops early or an earlier node fails, the ones still in
-    // flight are dropped, and a rejection among them must not surface as unhandled. Awaiting
-    // `pending` itself still throws.
-    pending.catch(() => undefined);
-    inFlight.push(pending);
-    // eslint-disable-next-line no-await-in-loop -- bound outstanding main-component lookups
-    if (inFlight.length >= MAX_IN_FLIGHT) await settleOldest();
-    if (spent()) return abandon();
-    // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
-    if (slice.due()) await slice.yield();
-  }
-  while (inFlight.length > 0) {
-    // eslint-disable-next-line no-await-in-loop -- settle in order so the budget sees a prefix
-    await settleOldest();
-    if (spent()) return abandon();
-  }
-  return { nodes: done, complete: true };
-};
+  perf?: PerfCall,
+): Promise<SerializedRun> =>
+  measureStage(perf, 'serializationMs', async () => {
+    const done: SerializedNode[] = [];
+    const inFlight: Array<Promise<SerializedNode>> = [];
+    const settleOldest = async (): Promise<void> => {
+      const out = await inFlight.shift()!;
+      done.push(out);
+      // +1 for the separating comma.
+      if (budget !== null) budget.used += JSON.stringify(out).length + 1;
+    };
+    // eslint-disable-next-line unicorn/consistent-function-scoping -- reads the mutable budget belonging to this serialization run
+    const spent = (): boolean => budget !== null && budget.used > budget.limit;
+    const abandon = (): SerializedRun => ({ nodes: done, complete: false });
+    const slice = new TimeSlice(perf);
+    for (const node of nodes) {
+      const pending = serializeFlat(node, perf);
+      // Marked handled up front: when the run stops early or an earlier node fails, the ones still in
+      // flight are dropped, and a rejection among them must not surface as unhandled. Awaiting
+      // `pending` itself still throws.
+      pending.catch(() => undefined);
+      inFlight.push(pending);
+      // eslint-disable-next-line no-await-in-loop -- bound outstanding main-component lookups
+      if (inFlight.length >= MAX_IN_FLIGHT) await settleOldest();
+      if (spent()) return abandon();
+      // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
+      if (slice.due()) await slice.yield();
+    }
+    while (inFlight.length > 0) {
+      // eslint-disable-next-line no-await-in-loop -- settle in order so the budget sees a prefix
+      await settleOldest();
+      if (spent()) return abandon();
+    }
+    return { nodes: done, complete: true };
+  });
 
 /** Flat reads (search / scans / selection): every node, in order, unless `budget` runs out. */
 export const serializeFlatNodes = (
   nodes: readonly SceneNode[],
   budget: CharBudget | null = null,
-): Promise<SerializedRun> => serializeInOrder(nodes, budget);
+  perf?: PerfCall,
+): Promise<SerializedRun> => serializeInOrder(nodes, budget, perf);
 
 /**
  * A search / scan reply: every match, or — when the budget stopped the run — the leading matches
@@ -1300,10 +1305,11 @@ export const toNodeListResult = (
 export const serializeTrees = async (
   roots: readonly SceneNode[],
   budget: CharBudget | null = null,
+  perf?: PerfCall,
 ): Promise<SerializedRun & { total: number }> => {
-  const forest = await flattenForest(roots);
+  const forest = await flattenForest(roots, perf);
   const total = forest.nodes.length;
-  const run = await serializeInOrder(forest.nodes, budget);
+  const run = await serializeInOrder(forest.nodes, budget, perf);
   if (!run.complete) return { nodes: [], complete: false, total };
   const out: SerializedNode[] = [];
   const childLists: Array<SerializedNode[] | undefined> = [];

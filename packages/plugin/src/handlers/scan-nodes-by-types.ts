@@ -1,4 +1,5 @@
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { perfFor } from '../perf.js';
 import { resultCharBudget, serializeFlatNodes, toNodeListResult } from '../serializer.js';
 import { collectMatches, resolveScope } from '../traverse.js';
 
@@ -16,6 +17,9 @@ export const createScanNodesByTypesHandler =
     const types = new Set(p.types as readonly string[]);
     const scope = await resolveScope(figmaCtx, p.root);
 
-    const matches = await collectMatches(scope, node => types.has(node.type));
-    return toNodeListResult(matches, await serializeFlatNodes(matches, resultCharBudget()));
+    const matches = await collectMatches(scope, node => types.has(node.type), perfFor(figmaCtx));
+    return toNodeListResult(
+      matches,
+      await serializeFlatNodes(matches, resultCharBudget(), perfFor(figmaCtx)),
+    );
   };

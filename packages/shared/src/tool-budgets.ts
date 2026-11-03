@@ -30,6 +30,8 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   'save_image_fills',
   'export_pdf',
   'get_document',
+  // Explicit sequential page preloading may outlive the ordinary read budget.
+  'load_page',
   'get_design_context',
   // Full recursive subtree serialization with no depth limit or dedupe (per mixed TEXT a
   // getStyledTextSegments call, per INSTANCE an async main-component resolve) — on a large frame
