@@ -19,6 +19,10 @@ breakpoints instead of guessing them:
    breakpoint's values guessed from another's instead of read from its frame. (When several
    width-bucket-distinct frames are selected at once, `get_design_context` also returns a top-level
    `hint` saying exactly this — honour it: re-fetch each frame on its own and ground from its data.)
+   Pairing breakpoints needs frame widths, so keep `search_nodes` in its default (full) mode for that.
+   To merely locate nodes by name or type, use `brief: true` (only id/name/type/parentId/visible — no
+   widths), optionally `limit`; then `get_node` / `get_design_context` for the full fields.
+   `truncated: true` means traversal stopped at the limit; further matches may exist.
 2. **Diff into one mobile-first base + `lg:`/`xl:` variants — both layout and values.** Differences
    split two ways. **Reflow** changes layout direction/flow — utilities on one markup
    (`flex-col lg:flex-row`, `grid-cols-1 xl:grid-cols-3`, `hidden xl:block`, alignment swaps).

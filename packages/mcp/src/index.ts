@@ -144,7 +144,7 @@ const textResult = (data: unknown): CallToolResult => ({
 const nodeListHandler =
   (tool: string, narrowWith: string): ToolHandler =>
   async args =>
-    textResult(fitNodeList((await dispatch(tool, args)) as SearchNodesResult, narrowWith));
+    textResult(fitNodeList((await dispatch(tool, args)) as SearchNodesResult<unknown>, narrowWith));
 
 // Tools whose result isn't just JSON.stringify(dispatch(...)): ping reports election state, the
 // server-local tools read the filesystem (some reusing dispatch), and get_screenshot returns an

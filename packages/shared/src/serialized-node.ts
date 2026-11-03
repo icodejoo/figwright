@@ -1086,13 +1086,20 @@ export type GetPagesResult = z.infer<typeof GetPagesResultSchema>;
  *
  * When every match will not fit in one tool result (NODE_LIST_BUDGET_BYTES), `nodes` is the leading
  * part that does, `matchCount` says how many matched in all, and `note` (first, so it is read
- * before the data) says how to reach the rest. Absent both, `nodes` is every match.
+ * before the data) says how to reach the rest. search_nodes may stop traversal at a requested
+ * limit; `truncated: true` then means more matches may exist, and `matchCount` covers only the
+ * collected prefix. Without these markers, `nodes` is every match.
  */
 export const NodeListResultSchema = z.object({
   note: z.string().optional(),
   matchCount: z.number().int().nonnegative().optional(),
+  truncated: z.literal(true).optional(),
   nodes: z.array(SerializedNodeSchema),
 });
-export type SearchNodesResult = z.infer<typeof NodeListResultSchema>;
+export type BriefSearchNode = Pick<SerializedNode, 'id' | 'name' | 'type' | 'parentId' | 'visible'>;
+export type SearchNodesResult<Node = SerializedNode> = Omit<
+  z.infer<typeof NodeListResultSchema>,
+  'nodes'
+> & { nodes: Node[] };
 export type ScanTextNodesResult = z.infer<typeof NodeListResultSchema>;
 export type ScanNodesByTypesResult = z.infer<typeof NodeListResultSchema>;

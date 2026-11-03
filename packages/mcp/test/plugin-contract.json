@@ -12,6 +12,8 @@
     "get_export_settings": ["nodeId"],
     "get_plugin_data": ["key", "namespace", "targetId", "targetType"],
     "search_nodes": [
+      "brief",
+      "limit",
       "name",
       "pluginData",
       "pluginData.keys",

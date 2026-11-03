@@ -2,6 +2,7 @@ import type { SearchNodesResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSearchNodesHandler } from '../../src/handlers/search-nodes.js';
+import * as serializer from '../../src/serializer.js';
 
 // Every Date.now() read advances a fake clock by 1ms, so a time slice ends after a fixed number of
 // reads instead of after however much work this machine fits into 40 real milliseconds.
@@ -43,6 +44,129 @@ const tree = (): SceneNode[] => [
 ];
 
 describe('search_nodes handler', () => {
+  it('preserves the legacy default result field for field', async () => {
+    const handler = createSearchNodesHandler(fakeFigma(tree()));
+    expect(await handler({ name: '' })).toMatchSnapshot();
+  });
+
+  it('brief returns exactly five basic fields without full serialization or expensive getters', async () => {
+    const node = fake('7:1', 'INSTANCE', 'Hidden instance');
+    Object.assign(node, { visible: false, parent: null });
+    for (const key of [
+      'x',
+      'y',
+      'width',
+      'height',
+      'fills',
+      'constraints',
+      'locked',
+      'getMainComponentAsync',
+    ]) {
+      Object.defineProperty(node, key, {
+        get: () => {
+          throw new Error(`must not read ${key}`);
+        },
+      });
+    }
+    const spy = vi.spyOn(serializer, 'serializeFlatNodes');
+    try {
+      expect(
+        await createSearchNodesHandler(fakeFigma([node]))({ type: 'INSTANCE', brief: true }),
+      ).toEqual({
+        nodes: [
+          { id: '7:1', name: 'Hidden instance', type: 'INSTANCE', parentId: null, visible: false },
+        ],
+      });
+      expect(spy).not.toHaveBeenCalled();
+      Object.assign(node, { parent: { id: '7:0' } });
+      expect(
+        await createSearchNodesHandler(fakeFigma([node]))({ type: 'INSTANCE', brief: true }),
+      ).toEqual({
+        nodes: [
+          { id: '7:1', name: 'Hidden instance', type: 'INSTANCE', parentId: '7:0', visible: false },
+        ],
+      });
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.each([true, false])(
+    'limit stops at a matching node before reading children or later nodes (brief=%s)',
+    async brief => {
+      const first = fake('7:1', 'FRAME', 'First');
+      Object.defineProperty(first, 'children', {
+        get: () => {
+          throw new Error('must stop before children');
+        },
+      });
+      const later = fake('7:2', 'TEXT', 'Later');
+      Object.defineProperty(later, 'type', {
+        get: () => {
+          throw new Error('must not visit later node');
+        },
+      });
+      const result = (await createSearchNodesHandler(fakeFigma([first, later]))({
+        type: 'FRAME',
+        brief,
+        limit: 1,
+      })) as SearchNodesResult;
+      expect(result.nodes.map(n => n.id)).toEqual(['7:1']);
+      expect(result.truncated).toBe(true);
+    },
+  );
+
+  it.each([true, false])(
+    'only marks truncated when the limit is reached (brief=%s)',
+    async brief => {
+      const handler = createSearchNodesHandler(fakeFigma(tree()));
+      expect(await handler({ type: 'TEXT', brief, limit: 3 })).not.toHaveProperty('truncated');
+      expect(await handler({ type: 'TEXT', brief })).not.toHaveProperty('truncated');
+      expect(await handler({ type: 'TEXT', brief, limit: 2 })).toHaveProperty('truncated', true);
+      expect(await handler({ type: 'VECTOR', brief, limit: 1 })).toEqual({ nodes: [] });
+    },
+  );
+
+  it('explicit brief:false preserves the default result', async () => {
+    const handler = createSearchNodesHandler(fakeFigma(tree()));
+    expect(await handler({ type: 'TEXT', brief: false })).toEqual(await handler({ type: 'TEXT' }));
+  });
+
+  it.each([0, -1, 10001, 1.5, NaN, Infinity, '2', null])(
+    'rejects invalid limit %s',
+    async limit => {
+      await expect(
+        createSearchNodesHandler(fakeFigma(tree()))({ type: 'TEXT', limit }),
+      ).rejects.toThrow(/limit/);
+    },
+  );
+
+  it('rejects non-boolean brief', async () => {
+    await expect(
+      createSearchNodesHandler(fakeFigma(tree()))({ type: 'TEXT', brief: 'true' }),
+    ).rejects.toThrow(/brief/);
+  });
+
+  it('keeps cooperative traversal with brief and limit', async () => {
+    const nodes = Array.from({ length: 200 }, (_, i) => fake(`7:${i}`, 'RECTANGLE', 'Match'));
+    const clock = tickingClock();
+    try {
+      let finished = false;
+      const pending = Promise.resolve(
+        createSearchNodesHandler(fakeFigma(nodes))({ type: 'RECTANGLE', brief: true, limit: 150 }),
+      ).then(result => {
+        finished = true;
+        return result as SearchNodesResult;
+      });
+      expect(await new Promise(resolve => setTimeout(() => resolve(finished), 0))).toBe(false);
+      const result = await pending;
+      expect(result.nodes.map(n => n.id)).toEqual(nodes.slice(0, 150).map(n => n.id));
+      expect(result.truncated).toBe(true);
+    } finally {
+      clock.mockRestore();
+    }
+  });
   it('yields while searching expensive native names even when no nodes match', async () => {
     let elapsed = 0;
     let visited = 0;
@@ -182,28 +306,46 @@ describe('search_nodes handler', () => {
   });
 });
 
-it('combines data key OR criteria with name/type AND without escaping the requested scope', async () => {
-  const nodes = tree();
-  for (const n of [nodes[0]!, ...(nodes[0]! as FrameNode).children, nodes[1]!]) {
-    Object.assign(n, {
-      getPluginDataKeys: () => (n.id === '1:2' ? ['tag', 'other'] : []),
-      getSharedPluginDataKeys: (ns: string) =>
-        ns === 'figwright' && n.id === '1:2' ? ['shared'] : [],
-    });
-  }
-  const handler = createSearchNodesHandler(fakeFigma(nodes));
-  expect(
-    (
-      (await handler({
-        pluginData: { keys: ['absent', 'tag'] },
-        sharedPluginData: { namespace: 'figwright' },
+it.each([true, false])(
+  'combines data/name/type/root filters with limit (brief=%s)',
+  async brief => {
+    const nodes = tree();
+    for (const n of [nodes[0]!, ...(nodes[0]! as FrameNode).children, nodes[1]!]) {
+      Object.assign(n, {
+        getPluginDataKeys: () => (n.id === '1:2' ? ['tag', 'other'] : []),
+        getSharedPluginDataKeys: (ns: string) =>
+          ns === 'figwright' && n.id === '1:2' ? ['shared'] : [],
+      });
+    }
+    const handler = createSearchNodesHandler(fakeFigma(nodes, { '1:1': nodes[0]! }));
+    expect(
+      (
+        (await handler({
+          pluginData: { keys: ['absent', 'tag'] },
+          sharedPluginData: { namespace: 'figwright' },
+          type: 'TEXT',
+          name: 'button',
+          root: '1:1',
+          brief,
+          limit: 1,
+        })) as SearchNodesResult
+      ).nodes.map(n => n.id),
+    ).toEqual(['1:2']);
+    expect(
+      await handler({
+        pluginData: {},
+        sharedPluginData: { namespace: 'figwright', keys: ['absent', 'shared'] },
+        root: '1:1',
+        name: 'BUTTON',
         type: 'TEXT',
-        name: 'button',
-      })) as SearchNodesResult
-    ).nodes.map(n => n.id),
-  ).toEqual(['1:2']);
-  expect(((await handler({ pluginData: { keys: [] } })) as SearchNodesResult).nodes).toEqual([]);
-  expect(
-    ((await handler({ sharedPluginData: { namespace: 'other' } })) as SearchNodesResult).nodes,
-  ).toEqual([]);
-});
+        brief,
+        limit: 1,
+      }),
+    ).toHaveProperty('truncated', true);
+    expect(await handler({ name: 'Footer', root: '1:1', brief, limit: 1 })).toEqual({ nodes: [] });
+    expect(((await handler({ pluginData: { keys: [] } })) as SearchNodesResult).nodes).toEqual([]);
+    expect(
+      ((await handler({ sharedPluginData: { namespace: 'other' } })) as SearchNodesResult).nodes,
+    ).toEqual([]);
+  },
+);

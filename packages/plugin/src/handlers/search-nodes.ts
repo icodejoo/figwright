@@ -1,3 +1,6 @@
+import type { BriefSearchNode } from '@figwright/shared';
+
+import { TimeSlice } from '../cooperative.js';
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { perfFor } from '../perf.js';
 import { resultCharBudget, serializeFlatNodes, toNodeListResult } from '../serializer.js';
@@ -10,6 +13,8 @@ export const createSearchNodesHandler =
       name?: unknown;
       type?: unknown;
       root?: unknown;
+      brief?: boolean;
+      limit?: number;
       pluginData?: { keys?: string[] };
       sharedPluginData?: { namespace: string; keys?: string[] };
     };
@@ -18,6 +23,12 @@ export const createSearchNodesHandler =
     }
     if (p.type !== undefined && typeof p.type !== 'string') {
       throw new TypeError('search_nodes: type must be a string');
+    }
+    if (p.brief !== undefined && typeof p.brief !== 'boolean') {
+      throw new TypeError('search_nodes: brief must be a boolean');
+    }
+    if (p.limit !== undefined && (!Number.isInteger(p.limit) || p.limit < 1 || p.limit > 10000)) {
+      throw new TypeError('search_nodes: limit must be an integer from 1 to 10000');
     }
     if (
       p.name === undefined &&
@@ -63,9 +74,30 @@ export const createSearchNodesHandler =
         (needle === null || node.name.toLowerCase().includes(needle)) &&
         hasData(node),
       perfFor(figmaCtx),
+      p.limit,
     );
-    return toNodeListResult(
+    const capped = p.limit !== undefined && matches.length === p.limit;
+    if (p.brief === true) {
+      const nodes: BriefSearchNode[] = [];
+      const slice = new TimeSlice(perfFor(figmaCtx));
+      for (const node of matches) {
+        // Only basic identity/visibility getters: no geometry, paints or async component reads.
+        const parent = node.parent;
+        nodes.push({
+          id: node.id,
+          name: node.name,
+          type: node.type,
+          parentId: parent?.id ?? null,
+          visible: node.visible,
+        });
+        // eslint-disable-next-line no-await-in-loop -- native getters still need cooperative slices
+        if (slice.due()) await slice.yield();
+      }
+      return capped ? { nodes, truncated: true } : { nodes };
+    }
+    const result = toNodeListResult(
       matches,
       await serializeFlatNodes(matches, resultCharBudget(), perfFor(figmaCtx)),
     );
+    return capped ? { ...result, truncated: true } : result;
   };

@@ -23,6 +23,25 @@ const onWire = (result: unknown): number =>
 const HINT = 'pass root to scope it';
 
 describe('fitNodeList', () => {
+  it('preserves the search limit marker on brief results, including budget trimming', () => {
+    const result = {
+      nodes: Array.from({ length: 50 }, (_, i) => ({
+        id: `1:${i}`,
+        name: 'x'.repeat(100),
+        type: 'TEXT',
+        parentId: null,
+        visible: true,
+      })),
+      truncated: true as const,
+    };
+    expect(fitNodeList(result, HINT, onWire(result))).toBe(result);
+    const budget = onWire(result) / 2;
+    const fitted = fitNodeList(result, HINT, budget);
+    expect(fitted.truncated).toBe(true);
+    expect(fitted.nodes).toEqual(result.nodes.slice(0, fitted.nodes.length));
+    expect(fitted.note).toContain('collected before the search limit stopped traversal');
+    expect(onWire(fitted)).toBeLessThanOrEqual(budget);
+  });
   it('returns a list that fits unchanged', () => {
     const result: SearchNodesResult = { nodes: [node('1:1', 'a'), node('1:2', 'b')] };
     expect(fitNodeList(result, HINT, onWire(result))).toBe(result);

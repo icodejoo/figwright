@@ -92,9 +92,23 @@ describe('M1 read tools — definitions', () => {
         name: { type: 'string' },
         type: { type: 'string' },
         root: { type: 'string' },
+        brief: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 10000 },
       },
     });
     expect(searchNodesToolDefinition.inputSchema.required).toBeUndefined();
+  });
+
+  it('validates search limit bounds without materializing optional defaults', () => {
+    expect(searchNodesTool.inputSchema.parse({ type: 'TEXT' })).toEqual({ type: 'TEXT' });
+    for (const limit of [0, 10001, 1.5, '1']) {
+      expect(searchNodesTool.inputSchema.safeParse({ type: 'TEXT', limit }).success).toBe(false);
+    }
+    for (const limit of [1, 10000]) {
+      expect(
+        searchNodesTool.inputSchema.safeParse({ type: 'TEXT', brief: true, limit }).success,
+      ).toBe(true);
+    }
   });
 
   it('scan_text_nodes declares optional root only', () => {

@@ -609,6 +609,28 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
       }
     };
 
+    it('round-trips brief search arguments and preserves the limit marker', async () => {
+      const response = {
+        nodes: [{ id: '1:1', name: 'Frame', type: 'FRAME', parentId: '0:1', visible: true }],
+        truncated: true,
+      };
+      await withPlugin(
+        {
+          search_nodes: params => {
+            expect(params).toEqual({ type: 'FRAME', brief: true, limit: 1 });
+            return response;
+          },
+        },
+        async server => {
+          const res = await server.send('tools/call', {
+            name: 'search_nodes',
+            arguments: { type: 'FRAME', brief: true, limit: 1 },
+          });
+          expect(JSON.parse(textOf(res))).toEqual(response);
+        },
+      );
+    });
+
     it('trims a node list past the limit, leading with a note and the full match count', async () => {
       await withPlugin({ search_nodes: () => ({ nodes: nodes(9_000) }) }, async server => {
         const res = await server.send('tools/call', {

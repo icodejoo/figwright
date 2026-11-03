@@ -31,12 +31,14 @@ export function* walk(nodes: readonly SceneNode[]): Generator<SceneNode> {
  * The nodes {@link walk} would yield that satisfy `match`, in the same order — but collected
  * cooperatively, handing the thread back to Figma between slices. A page-wide walk is all native
  * getter reads and measured ~8–12s for a 32k-instance page; done in one go it froze the editor and
- * every other call for that long.
+ * every other call for that long. An optional limit stops immediately on the last requested match,
+ * without reading its children or checking whether further matches exist.
  */
 export const collectMatches = async (
   nodes: readonly SceneNode[],
   match: (node: SceneNode) => boolean,
   perf?: PerfCall,
+  limit?: number,
 ): Promise<SceneNode[]> =>
   measureStage(perf, 'traversalMs', async () => {
     const out: SceneNode[] = [];
@@ -44,7 +46,11 @@ export const collectMatches = async (
     const slice = new TimeSlice(perf);
     while (stack.length > 0) {
       const node = stack.pop()!;
-      if (match(node)) out.push(node);
+      if (match(node)) {
+        out.push(node);
+        // Stop before even reading the last match's children. No lookahead past the cap.
+        if (limit !== undefined && out.length >= limit) break;
+      }
       const children = childrenOf(node);
       if (children !== null) {
         for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]!);
