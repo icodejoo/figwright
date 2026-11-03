@@ -269,13 +269,23 @@ const guardFor = async (figmaCtx: typeof figma, inst: InstanceNode): Promise<Ins
 export const captureOverrideGuard = async (
   figmaCtx: typeof figma,
   ids: readonly string[],
+  instancesBefore?: Map<string, Promise<InstanceGuard>>,
 ): Promise<InstanceGuard[]> => {
   const instances = new Map<string, InstanceNode>();
   const nodes = await Promise.all(ids.map(async id => figmaCtx.getNodeByIdAsync(id)));
   for (const node of nodes) {
     if (node !== null) for (const inst of instanceChain(node)) instances.set(inst.id, inst);
   }
-  return Promise.all([...instances.values()].map(async inst => guardFor(figmaCtx, inst)));
+  return Promise.all(
+    [...instances.values()].map(inst => {
+      let before = instancesBefore?.get(inst.id);
+      if (before === undefined) {
+        before = Promise.resolve().then(() => guardFor(figmaCtx, inst));
+        instancesBefore?.set(inst.id, before);
+      }
+      return before;
+    }),
+  );
 };
 
 const reswap = async (

@@ -74,7 +74,11 @@ interface BatchInverse {
    * Read-only: validate the target and snapshot whatever `undo` will need. Throw to abort the
    * batch.
    */
-  capture(figmaCtx: typeof figma, params: unknown): Promise<unknown>;
+  capture(
+    figmaCtx: typeof figma,
+    params: unknown,
+    orders?: Map<string, string[]>,
+  ): Promise<unknown>;
   /**
    * Restore the pre-op state. Receives the capture snapshot and the op's apply result. Resolves to
    * a note (a string) when something could not be put back exactly; anything else means it was.
@@ -360,6 +364,19 @@ interface Rehome {
   orders: { parentId: string; order: string[] }[];
 }
 
+// Synchronous reads cannot interleave; publish once before returning to the microtask queue.
+const captureOrderBefore = (
+  parent: BaseNode & ChildrenMixin,
+  orders?: Map<string, string[]>,
+): string[] => {
+  let before = orders?.get(parent.id);
+  if (before === undefined) {
+    before = captureOrder(parent);
+    orders?.set(parent.id, before);
+  }
+  return before;
+};
+
 /**
  * Snapshot every moved node's placement and the child order of every container involved — each
  * node's current parent, then `also` (the destination) — so undo can rebuild each container.
@@ -367,6 +384,7 @@ interface Rehome {
 const captureRehome = (
   nodes: readonly SceneNode[],
   also: readonly (BaseNode & ChildrenMixin)[],
+  orders?: Map<string, string[]>,
 ): Rehome => {
   const containers = new Map<string, BaseNode & ChildrenMixin>();
   for (const n of nodes) {
@@ -375,7 +393,10 @@ const captureRehome = (
   for (const c of also) containers.set(c.id, c);
   return {
     placements: nodes.map(capturePlacement),
-    orders: [...containers.values()].map(c => ({ parentId: c.id, order: captureOrder(c) })),
+    orders: [...containers.values()].map(c => ({
+      parentId: c.id,
+      order: captureOrderBefore(c, orders),
+    })),
   };
 };
 
@@ -425,7 +446,7 @@ interface ReparentState {
 }
 
 const reparentInverse: BatchInverse = {
-  async capture(figmaCtx, params) {
+  async capture(figmaCtx, params, orders) {
     const destinationId = stringParam(params, 'newParentId', 'reparent_nodes');
     const destination = await nodeOf(figmaCtx, destinationId, 'reparent_nodes');
     if (!('appendChild' in destination)) {
@@ -437,7 +458,7 @@ const reparentInverse: BatchInverse = {
     );
     refuseVariantLeaving('reparent_nodes', nodes, destinationId);
     const state: ReparentState = {
-      rehome: captureRehome(nodes, [destination as BaseNode & ChildrenMixin]),
+      rehome: captureRehome(nodes, [destination as BaseNode & ChildrenMixin], orders),
     };
     return state;
   },
@@ -491,10 +512,10 @@ const removeLeftover = async (
 };
 
 const groupInverse: BatchInverse = {
-  async capture(figmaCtx, params) {
+  async capture(figmaCtx, params, orders) {
     const { nodes, parent } = await groupTargets(figmaCtx, params);
     refuseVariantLeaving('group_nodes', nodes, parent.id);
-    const state: ReparentState = { rehome: captureRehome(nodes, [parent]) };
+    const state: ReparentState = { rehome: captureRehome(nodes, [parent], orders) };
     return state;
   },
   async undo(figmaCtx, _params, captured, result) {
@@ -524,10 +545,10 @@ const repeatTargets = async (
  * group is removed. Ungrouping keeps every child's id and place (measured), so nothing else moves.
  */
 const repeatInverse: BatchInverse = {
-  async capture(figmaCtx, params) {
+  async capture(figmaCtx, params, orders) {
     const { nodes, parent } = await repeatTargets(figmaCtx, params);
     refuseVariantLeaving('repeat_nodes', nodes, parent.id);
-    const state: ReparentState = { rehome: captureRehome(nodes, [parent]) };
+    const state: ReparentState = { rehome: captureRehome(nodes, [parent], orders) };
     return state;
   },
   async undo(figmaCtx, _params, captured, result) {
@@ -723,7 +744,7 @@ interface CombineState extends ReparentState {
  * that never had a property comes back with its sibling's (measured). Those extras go.
  */
 const combineInverse: BatchInverse = {
-  async capture(figmaCtx, params) {
+  async capture(figmaCtx, params, orders) {
     const ids = stringsParam(params, 'nodeIds', 'combine_as_variants');
     const nodes = await Promise.all(
       ids.map(async id => nodeOf(figmaCtx, id, 'combine_as_variants')),
@@ -741,7 +762,7 @@ const combineInverse: BatchInverse = {
         ? [(await nodeOf(figmaCtx, parentId, 'combine_as_variants')) as BaseNode & ChildrenMixin]
         : [];
     const state: CombineState = {
-      rehome: captureRehome(components, also),
+      rehome: captureRehome(components, also, orders),
       properties: components.map(c => ({
         id: c.id,
         keys: Object.keys(c.componentPropertyDefinitions),
@@ -776,7 +797,7 @@ interface OrderState {
 }
 
 const reorderInverse: BatchInverse = {
-  async capture(figmaCtx, params) {
+  async capture(figmaCtx, params, orders) {
     const ids = stringsParam(params, 'nodeIds', 'reorder_nodes');
     const nodes = await Promise.all(ids.map(async id => figmaCtx.getNodeByIdAsync(id)));
     const parents = new Map<string, BaseNode & ChildrenMixin>();
@@ -788,7 +809,10 @@ const reorderInverse: BatchInverse = {
     }
     const state: OrderState = {
       ids,
-      orders: [...parents.values()].map(p => ({ parentId: p.id, order: captureOrder(p) })),
+      orders: [...parents.values()].map(p => ({
+        parentId: p.id,
+        order: captureOrderBefore(p, orders),
+      })),
     };
     return state;
   },
@@ -2484,14 +2508,50 @@ interface Captured {
   layout: LayoutScope;
 }
 
-const captureOp = async (figmaCtx: typeof figma, op: ParsedOp): Promise<Captured> => {
+const memo = <T>(
+  cache: Map<string, Promise<T>>,
+  ids: readonly string[],
+  read: () => Promise<T>,
+) => {
+  const key = JSON.stringify([...new Set(ids)]);
+  let before = cache.get(key);
+  if (before === undefined) {
+    before = Promise.resolve().then(read);
+    cache.set(key, before);
+  }
+  return before;
+};
+
+/** Only Phase 1 may use these caches: every entry describes the same pre-batch document. */
+const captureCache = (figmaCtx: typeof figma) => {
+  const orders = new Map<string, string[]>();
+  const roots = new Map<string, Promise<LayoutScope>>();
+  const instances = new Map<string, Promise<InstanceGuard>>();
+  const layouts = new Map<string, Promise<LayoutScope>>();
+  const guards = new Map<string, Promise<InstanceGuard[]>>();
+  // Preserve id order: layout restoration order is significant. Root/instance caches also share
+  // captures across partially overlapping (or differently ordered) id lists without losing ids.
+  return {
+    orders,
+    layout: (ids: readonly string[]) =>
+      memo(layouts, ids, () => captureLayoutScope(figmaCtx, ids, roots)),
+    guard: (ids: readonly string[]) =>
+      memo(guards, ids, () => captureOverrideGuard(figmaCtx, ids, instances)),
+  };
+};
+
+const captureOp = async (
+  figmaCtx: typeof figma,
+  op: ParsedOp,
+  cache: ReturnType<typeof captureCache>,
+): Promise<Captured> => {
   const inverse = INVERSES[op.tool]!;
-  const state = await inverse.capture(figmaCtx, op.params);
+  const state = await inverse.capture(figmaCtx, op.params, cache.orders);
   const touched = inverse.touches?.(op.params, state) ?? [];
   const resized = inverse.resizes?.(op.params, state) ?? [];
   const [guard, layout] = await Promise.all([
-    touched.length > 0 ? captureOverrideGuard(figmaCtx, touched) : [],
-    resized.length > 0 ? captureLayoutScope(figmaCtx, resized) : [],
+    touched.length > 0 ? cache.guard(touched) : [],
+    resized.length > 0 ? cache.layout(resized) : [],
   ]);
   return { state, guard, layout };
 };
@@ -2532,7 +2592,8 @@ export const createBatchHandler =
     // seconds"); pass that on as an Error that says nothing was applied yet, rather than raw.
     let captured: Captured[];
     try {
-      captured = await Promise.all(ops.map(async op => captureOp(figmaCtx, op)));
+      const cache = captureCache(figmaCtx);
+      captured = await Promise.all(ops.map(async op => captureOp(figmaCtx, op, cache)));
     } catch (err) {
       if (err instanceof Error) throw err;
       throw new Error(`batch: capture failed before any op was applied: ${String(err)}`, {

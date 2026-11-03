@@ -687,6 +687,7 @@ const ownsBox = (node: SceneNode): boolean =>
 export const captureLayoutScope = async (
   figmaCtx: typeof figma,
   ids: readonly string[],
+  rootsBefore?: Map<string, Promise<LayoutScope>>,
 ): Promise<LayoutScope> => {
   const roots = new Map<string, SceneNode>();
   const nodes = await Promise.all(ids.map(async id => figmaCtx.getNodeByIdAsync(id)));
@@ -702,12 +703,21 @@ export const captureLayoutScope = async (
   const scope: LayoutScope = [];
   const seen = new Set<string>();
   for (const root of roots.values()) {
-    const all: SceneNode[] = [root];
-    if ('findAll' in root) all.push(...(root as ChildrenMixin).findAll(() => true));
-    for (const n of all) {
-      if (seen.has(n.id) || !ownsBox(n)) continue;
-      seen.add(n.id);
-      scope.push(captureGeometry(n));
+    let before = rootsBefore?.get(root.id);
+    if (before === undefined) {
+      // Publish the promise before walking: concurrent ops can resolve to the same layout root.
+      before = Promise.resolve().then(() => {
+        const all: SceneNode[] = [root];
+        if ('findAll' in root) all.push(...(root as ChildrenMixin).findAll(() => true));
+        return all.filter(ownsBox).map(captureGeometry);
+      });
+      rootsBefore?.set(root.id, before);
+    }
+    // eslint-disable-next-line no-await-in-loop -- preserve the original root/box restore order
+    for (const snapshot of await before) {
+      if (seen.has(snapshot.id)) continue;
+      seen.add(snapshot.id);
+      scope.push(snapshot);
     }
   }
   return scope;

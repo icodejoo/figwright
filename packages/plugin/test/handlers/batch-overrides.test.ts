@@ -84,6 +84,9 @@ describe('instance override guard', () => {
     expect(instance.overrides).toEqual([{ id: 'I;2', overriddenFields: ['name'] }]);
     expect(b.name).toBe('Renamed');
     expect(a.fills).toEqual(['red']);
+    // A shared pre-batch guard can be replayed by several undo steps without being consumed.
+    expect(await restoreOverrideGuard(figmaCtx, guards)).toBeUndefined();
+    expect(instance.removeOverrides).toHaveBeenCalledOnce();
   });
 
   it('leaves an instance alone when its override list already matches', async () => {
