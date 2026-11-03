@@ -96,6 +96,8 @@ export const fixture = () => {
       async id => (id === 'page' ? page : (nodes.find(node => node.id === id) ?? null)),
     ),
     variables: {
+      getLocalVariablesAsync: vi.fn<() => Promise<Variable[]>>(async () => []),
+      getLocalVariableCollectionsAsync: vi.fn<() => Promise<VariableCollection[]>>(async () => []),
       getVariableByIdAsync: vi.fn<(id: string) => Promise<ReturnType<typeof variables.get> | null>>(
         async id => variables.get(id) ?? null,
       ),

@@ -3,6 +3,7 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 import { writePaints } from './paints.js';
 import {
   bindingScope,
+  createVariableResolver,
   visitBindings,
   hasBindingStyle,
   isInheritedBinding,
@@ -70,13 +71,10 @@ export const createBindVariablesByValueHandler =
     if (!Number.isFinite(tolerance) || tolerance < 0 || tolerance > 0.01)
       throw new Error('tolerance must be from 0 to 0.01');
     const deadline = now() + budget;
-    const cache = new Map<string, Variable>();
-    const collections = new Map<string, VariableCollection>();
+    const resolver = createVariableResolver(api);
     const get = async (id: string) => {
-      if (cache.has(id)) return cache.get(id)!;
-      const v = await api.variables.getVariableByIdAsync(id);
+      const v = await resolver.resolve(id);
       if (!v) throw new Error(`Variable not found: ${id}`);
-      cache.set(id, v);
       return v;
     };
     const resolve = async (initial: Variable): Promise<number | Color> => {
@@ -91,14 +89,8 @@ export const createBindVariablesByValueHandler =
         seen.add(v.id);
         if (v.resolvedType !== initial.resolvedType)
           throw new Error(`Variable alias type mismatch: ${v.id}`);
-        let collection = collections.get(v.variableCollectionId);
-        if (!collection) {
-          collection =
-            (await api.variables.getVariableCollectionByIdAsync(v.variableCollectionId)) ??
-            undefined;
-          if (!collection) throw new Error(`Collection not found: ${v.variableCollectionId}`);
-          collections.set(collection.id, collection);
-        }
+        const collection = await resolver.resolveCollection(v.variableCollectionId);
+        if (!collection) throw new Error(`Collection not found: ${v.variableCollectionId}`);
         const requested =
           v.variableCollectionId === initial.variableCollectionId ? p.modeId : undefined;
         const mode =

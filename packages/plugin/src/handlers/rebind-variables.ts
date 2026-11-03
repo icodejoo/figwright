@@ -4,6 +4,7 @@ import {
   type Binding,
   type BindingGroup,
   bindingScope,
+  createVariableResolver,
   hasBindingStyle,
   isInheritedBinding,
   readBindings,
@@ -39,10 +40,11 @@ export const createRebindVariablesHandler =
       mapping.set(pair.from, pair.to);
     }
     const variables = new Map<string, Variable>();
+    const resolver = createVariableResolver(api);
     // Resolve and validate the ENTIRE mapping before loading/traversing or performing any write.
     for (const id of new Set(p.mapping.flatMap(pair => [pair.from, pair.to]))) {
       // eslint-disable-next-line no-await-in-loop -- all variables validated before writes
-      const variable = await api.variables.getVariableByIdAsync(id);
+      const variable = await resolver.resolve(id);
       if (!variable) throw new Error(`Variable not found: ${id}`);
       variables.set(id, variable);
     }

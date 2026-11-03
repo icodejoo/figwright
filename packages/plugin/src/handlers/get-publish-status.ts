@@ -1,7 +1,7 @@
 /* eslint-disable no-await-in-loop -- Sequential native calls preserve traversal budgets, alias dependencies and read-modify-write ordering. */
 import { TimeSlice } from '../cooperative.js';
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { bindingScope, visitBindings } from './variable-bindings.js';
+import { bindingScope, createVariableResolver, visitBindings } from './variable-bindings.js';
 type Kind =
   | 'VARIABLE_COLLECTION'
   | 'VARIABLE'
@@ -31,6 +31,7 @@ export const createGetPublishStatusHandler =
     if (!Number.isInteger(limit) || limit < 1 || limit > 5000)
       throw new Error('limit must be from 1 to 5000');
     const deadline = now() + 100000;
+    const resolver = createVariableResolver(api);
     const items: {
       id: string;
       name: string;
@@ -120,9 +121,9 @@ export const createGetPublishStatusHandler =
             try {
               const object =
                 group === 'VARIABLE_COLLECTION'
-                  ? await api.variables.getVariableCollectionByIdAsync(id)
+                  ? await resolver.resolveCollection(id)
                   : group === 'VARIABLE'
-                    ? await api.variables.getVariableByIdAsync(id)
+                    ? await resolver.resolve(id)
                     : await api.getStyleByIdAsync(id);
               if (object) objects.push(object);
             } catch (error) {

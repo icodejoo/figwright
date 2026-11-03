@@ -1,5 +1,10 @@
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { bindingScope, readBindings, visitBindings } from './variable-bindings.js';
+import {
+  bindingScope,
+  createVariableResolver,
+  readBindings,
+  visitBindings,
+} from './variable-bindings.js';
 
 export const createScanVariableBindingsHandler =
   (api: typeof figma, now: () => number = Date.now): SandboxToolHandler =>
@@ -15,16 +20,8 @@ export const createScanVariableBindingsHandler =
     if (!Number.isInteger(sampleLimit) || sampleLimit < 0 || sampleLimit > 20)
       throw new Error('sampleLimit must be an integer from 0 to 20');
     const scope = await bindingScope(api, p.root);
-    const variables = new Map<string, Promise<Variable | null>>();
-    const collections = new Map<string, Promise<VariableCollection | null>>();
-    const variableFor = (id: string) => {
-      if (!variables.has(id))
-        variables.set(
-          id,
-          api.variables.getVariableByIdAsync(id).catch(() => null),
-        );
-      return variables.get(id)!;
-    };
+    const resolver = createVariableResolver(api);
+    const variableFor = (id: string) => resolver.resolve(id).catch(() => null);
     const rows = new Map<
       string,
       {
@@ -71,13 +68,8 @@ export const createScanVariableBindingsHandler =
       if (!variable) continue;
       row.name = variable.name;
       const id = variable.variableCollectionId;
-      if (!collections.has(id))
-        collections.set(
-          id,
-          api.variables.getVariableCollectionByIdAsync(id).catch(() => null),
-        );
       // eslint-disable-next-line no-await-in-loop -- one lookup per distinct collection
-      const collection = await collections.get(id)!;
+      const collection = await resolver.resolveCollection(id).catch(() => null);
       if (collection) row.collectionName = collection.name;
     }
     return {

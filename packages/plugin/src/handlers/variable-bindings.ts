@@ -2,6 +2,34 @@ import { TimeSlice } from '../cooperative.js';
 import { measureStage, perfFor } from '../perf.js';
 import { childrenOf } from '../traverse.js';
 
+const cachedLookup = <T extends { id: string }>(
+  local: () => Promise<T[]>,
+  fallback: (id: string) => Promise<T | null>,
+) => {
+  let locals: Promise<Map<string, T>> | undefined;
+  const remote = new Map<string, Promise<T | null>>();
+  return async (id: string): Promise<T | null> => {
+    const values = await (locals ??= local().then(rows => new Map(rows.map(row => [row.id, row]))));
+    if (values.has(id)) return values.get(id)!;
+    if (!remote.has(id)) remote.set(id, fallback(id));
+    return remote.get(id)!;
+  };
+};
+
+// Keep native objects scoped to one tool call; local ID lookups can stall in Figma.
+export const createVariableResolver = (api: typeof figma) => {
+  return {
+    resolve: cachedLookup(
+      () => api.variables.getLocalVariablesAsync(),
+      id => api.variables.getVariableByIdAsync(id),
+    ),
+    resolveCollection: cachedLookup(
+      () => api.variables.getLocalVariableCollectionsAsync(),
+      id => api.variables.getVariableCollectionByIdAsync(id),
+    ),
+  };
+};
+
 export type BindingGroup = 'fills' | 'strokes' | 'effects' | 'layoutGrids' | 'scalars';
 export interface Binding {
   variableId: string;
