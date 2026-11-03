@@ -104,7 +104,77 @@ export const toFigmaEffect = (e: SerializedEffect, figmaCtx: typeof figma): Effe
     return shadow as unknown as Effect;
   }
   if (e.type === 'LAYER_BLUR' || e.type === 'BACKGROUND_BLUR') {
+    if (e.blurType === 'PROGRESSIVE') {
+      if (e.startRadius === undefined || e.startOffset === undefined || e.endOffset === undefined) {
+        throw new TypeError('PROGRESSIVE blur requires startRadius, startOffset and endOffset');
+      }
+      return {
+        type: e.type,
+        visible: e.visible,
+        radius: e.radius ?? 0,
+        blurType: 'PROGRESSIVE',
+        startRadius: e.startRadius,
+        startOffset: e.startOffset,
+        endOffset: e.endOffset,
+      };
+    }
     return { type: e.type, visible: e.visible, radius: e.radius ?? 0 } as Effect;
+  }
+  if (e.type === 'NOISE' || e.type === 'TEXTURE' || e.type === 'GLASS') {
+    if (Object.keys(e.boundVariables ?? {}).length > 0) {
+      throw new TypeError(`${e.type} does not support effect variable bindings`);
+    }
+    const out: Record<string, unknown> = { type: e.type, visible: e.visible };
+    const requireFields = (fields: readonly string[]): void => {
+      for (const field of fields) {
+        const value = (e as unknown as Record<string, unknown>)[field];
+        if (value === undefined) throw new TypeError(`${e.type} requires ${field}`);
+        out[field] = value;
+      }
+    };
+    if (e.type === 'GLASS') {
+      // splay exists on live reads but not in plugin-typings: never silently discard it.
+      if (e.splay !== undefined)
+        throw new TypeError(
+          'GLASS splay is not writable in the supported typings; cannot round-trip it',
+        );
+      requireFields([
+        'radius',
+        'lightIntensity',
+        'lightAngle',
+        'refraction',
+        'depth',
+        'dispersion',
+      ]);
+    } else {
+      const scalar = (e as SerializedEffect & { noiseSize?: number }).noiseSize;
+      const size =
+        e.noiseSizeVector ?? (scalar === undefined ? undefined : { x: scalar, y: scalar });
+      if (size === undefined)
+        throw new TypeError(`${e.type} requires noiseSizeVector or noiseSize`);
+      if (scalar !== undefined && scalar !== size.x)
+        throw new TypeError('noiseSizeVector.x must equal noiseSize');
+      out.noiseSize = size.x;
+      out.noiseSizeVector = size;
+      if (e.type === 'TEXTURE') requireFields(['radius', 'clipToShape']);
+      else {
+        if (e.blendMode !== undefined)
+          throw new TypeError('NOISE blendMode is rejected by Figma (measured)');
+        requireFields(['noiseType', 'density']);
+        if (e.color === undefined)
+          throw new TypeError('NOISE requires color (including MULTITONE)');
+        out.color = toDocumentRgba(figmaCtx, e.color, 'NOISE');
+        if (e.noiseType === 'MULTITONE') requireFields(['opacity']);
+        else if (e.noiseType === 'MONOTONE' || e.noiseType === 'DUOTONE') {
+          if (e.noiseType === 'DUOTONE') {
+            if (e.secondaryColor === undefined)
+              throw new TypeError('DUOTONE requires secondaryColor');
+            out.secondaryColor = toDocumentRgba(figmaCtx, e.secondaryColor, 'NOISE');
+          }
+        } else throw new TypeError('NOISE requires MONOTONE, DUOTONE or MULTITONE noiseType');
+      }
+    }
+    return out as unknown as Effect;
   }
   throw new TypeError(`unsupported effect type: ${e.type}`);
 };

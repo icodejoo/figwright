@@ -62,3 +62,28 @@ describe('get_pages handler', () => {
     expect(result.pages).toEqual([]);
   });
 });
+
+it('emits isPageDivider only when true, without touching unloaded children', () => {
+  const ctx = {
+    root: {
+      children: [
+        {
+          id: 'd',
+          name: '---',
+          isPageDivider: true,
+          flowStartingPoints: [],
+          get children() {
+            throw new Error('unloaded');
+          },
+        },
+        { id: 'p', name: 'Page', isPageDivider: false, flowStartingPoints: [] },
+      ],
+    },
+  } as unknown as typeof figma;
+  expect(createGetPagesHandler(ctx)({})).toEqual({
+    pages: [
+      { id: 'd', name: '---', isPageDivider: true, flows: [] },
+      { id: 'p', name: 'Page', flows: [] },
+    ],
+  });
+});

@@ -21,7 +21,6 @@ export const createUpdateEffectStyleHandler =
       throw new Error(`update_effect_style: effect style ${p.styleId} not found`);
     }
     const es = style as EffectStyle;
-    if (typeof p.name === 'string') es.name = p.name;
     if (Array.isArray(p.effects)) {
       es.effects = await toFigmaEffectsBound(
         figmaCtx,
@@ -29,6 +28,7 @@ export const createUpdateEffectStyleHandler =
         'update_effect_style',
       );
     }
+    if (typeof p.name === 'string') es.name = p.name;
     if (typeof p.description === 'string') es.description = p.description;
 
     const result: StyleResult = { ok: true, styleId: es.id, name: es.name };

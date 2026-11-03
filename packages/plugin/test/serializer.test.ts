@@ -2305,7 +2305,7 @@ describe('serializeEffect', () => {
       });
     });
 
-    it('reads a MULTITONE noise by its opacity, leaving out the colour it has no setting for', () => {
+    it('reads MULTITONE opacity and preserves its API-required color for writing back', () => {
       const out = serializeEffect(
         {
           type: 'NOISE',
@@ -2328,6 +2328,7 @@ describe('serializeEffect', () => {
         noiseSizeVector: { x: 4.5, y: 4.5 },
         density: 1,
         opacity: 0.699999988079071,
+        color: { r: 0, g: 0, b: 0, a: 0.25 },
       });
     });
 
@@ -3023,4 +3024,27 @@ describe('serializeFlatSync rarer text settings', () => {
       expect(out).not.toHaveProperty(key);
     }
   });
+});
+
+it('emits image/video scale only for TILE and rotation only outside CROP', () => {
+  for (const type of ['IMAGE', 'VIDEO'] as const) {
+    for (const scaleMode of ['FILL', 'FIT', 'CROP', 'TILE'] as const) {
+      const paint = {
+        type,
+        scaleMode,
+        imageHash: 'image',
+        videoHash: 'video',
+        scalingFactor: 0.5,
+        rotation: 90,
+      } as Paint;
+      const out = serializePaint(paint, null);
+      expect(Object.hasOwn(out!, 'scalingFactor')).toBe(scaleMode === 'TILE');
+      expect(Object.hasOwn(out!, 'rotation')).toBe(scaleMode !== 'CROP');
+      expect(Reflect.get(out!, 'scalingFactor')).toBe(scaleMode === 'TILE' ? 0.5 : undefined);
+      expect(Reflect.get(out!, 'rotation')).toBe(scaleMode === 'CROP' ? undefined : 90);
+      const defaults = serializePaint({ ...paint, scalingFactor: 1, rotation: 0 } as Paint, null);
+      expect(defaults).not.toHaveProperty('scalingFactor');
+      expect(defaults).not.toHaveProperty('rotation');
+    }
+  }
 });

@@ -50,6 +50,11 @@ export const createSetImageFillHandler =
       data?: unknown;
       url?: unknown;
       index?: unknown;
+      filters?: ImageFilters;
+      imageTransform?: Transform;
+      rotation?: number;
+      scalingFactor?: number;
+      blendMode?: BlendMode;
       scaleMode?: unknown;
     };
     if (typeof p.nodeId !== 'string') {
@@ -86,6 +91,14 @@ export const createSetImageFillHandler =
       );
     }
 
+    const replaced = index === undefined ? fills.findLast(f => f.type === 'IMAGE') : fills[index];
+    const effectiveMode = scaleMode ?? (replaced?.type === 'IMAGE' ? replaced.scaleMode : 'FILL');
+    if (p.imageTransform !== undefined && effectiveMode !== 'CROP')
+      throw new Error('set_image_fill: imageTransform requires CROP');
+    if (p.scalingFactor !== undefined && effectiveMode !== 'TILE')
+      throw new Error('set_image_fill: scalingFactor requires TILE');
+    if (p.rotation !== undefined && (effectiveMode === 'CROP' || p.rotation % 90 !== 0))
+      throw new Error('set_image_fill: rotation requires FILL/FIT/TILE and increments of 90');
     const image =
       typeof p.data === 'string'
         ? figmaCtx.createImage(figmaCtx.base64Decode(p.data))
@@ -99,7 +112,15 @@ export const createSetImageFillHandler =
       at = topImage >= 0 ? topImage : fills.length;
     }
     const next = [...fills];
-    next.splice(at, at < fills.length ? 1 : 0, paintFor(fills[at], image.hash, scaleMode));
+    const paint = paintFor(fills[at], image.hash, scaleMode);
+    const adjustments: Partial<ImagePaint> = {
+      ...(p.filters === undefined ? {} : { filters: { ...paint.filters, ...p.filters } }),
+      ...(p.imageTransform === undefined ? {} : { imageTransform: p.imageTransform }),
+      ...(p.rotation === undefined ? {} : { rotation: p.rotation }),
+      ...(p.scalingFactor === undefined ? {} : { scalingFactor: p.scalingFactor }),
+      ...(p.blendMode === undefined ? {} : { blendMode: p.blendMode }),
+    };
+    next.splice(at, at < fills.length ? 1 : 0, { ...paint, ...adjustments });
     await writePaints(target, 'fills', next);
 
     const written = (target.fills as readonly Paint[])[at];

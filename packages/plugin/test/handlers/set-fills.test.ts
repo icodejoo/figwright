@@ -204,3 +204,62 @@ describe('set_fills handler', () => {
     expect(gradient.gradientStops[1]?.color).toEqual({ r: 0, g: 0, b: 0, a: 1 });
   });
 });
+
+it('preserves paint-level blends across serializer, codegen simplification and SOLID/gradient/PATTERN writes', async () => {
+  const { serializePaint } = await import('../../src/serializer.js');
+  const { simplifyPaint } = await import('@figwright/shared');
+  const { toFigmaPaint } = await import('../../src/handlers/set-fills.js');
+  const ctx = {} as typeof figma;
+  for (const paint of [
+    { type: 'SOLID', color: { r: 1, g: 0, b: 0 }, visible: true, opacity: 1 },
+    {
+      type: 'GRADIENT_LINEAR',
+      gradientStops: [
+        { position: 0, color: { r: 0, g: 0, b: 0, a: 1 } },
+        { position: 1, color: { r: 1, g: 1, b: 1, a: 1 } },
+      ],
+      gradientTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+      visible: true,
+      opacity: 1,
+    },
+    {
+      type: 'PATTERN',
+      sourceNodeId: 'source',
+      tileType: 'RECTANGULAR',
+      scalingFactor: 1,
+      spacing: { x: 0, y: 0 },
+      horizontalAlignment: 'START',
+      verticalAlignment: 'START',
+      visible: true,
+      opacity: 1,
+    },
+  ]) {
+    const read = serializePaint({ ...paint, blendMode: 'MULTIPLY' } as unknown as Paint, null);
+    expect(read.blendMode).toBe('MULTIPLY');
+    expect(simplifyPaint(read).blendMode).toBe('MULTIPLY');
+    expect(toFigmaPaint(read, ctx).blendMode).toBe('MULTIPLY');
+    expect(
+      serializePaint({ ...paint, blendMode: 'NORMAL' } as unknown as Paint, null),
+    ).not.toHaveProperty('blendMode');
+  }
+  const image = serializePaint(
+    {
+      type: 'IMAGE',
+      scaleMode: 'TILE',
+      imageHash: 'x',
+      rotation: 90,
+      scalingFactor: 0.5,
+      filters: { exposure: 0, contrast: 0.3 },
+    } as Paint,
+    null,
+  );
+  expect(image).toMatchObject({ rotation: 90, scalingFactor: 0.5, filters: { contrast: 0.3 } });
+  expect(simplifyPaint(image)).toMatchObject({
+    rotation: 90,
+    scalingFactor: 0.5,
+    filters: { contrast: 0.3 },
+  });
+});

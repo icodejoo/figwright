@@ -90,3 +90,55 @@ describe('create_effect_style handler', () => {
     ]);
   });
 });
+
+it.each([
+  { type: 'GLASS', visible: true, splay: 0 },
+  { type: 'NOISE', visible: true, noiseType: 'MULTITONE', noiseSize: 2, density: 1, opacity: 0.5 },
+])('creates no orphan when effect conversion rejects $type', async effect => {
+  const { figma: f, creations } = fakeFigma();
+  await expect(
+    createCreateEffectStyleHandler(f)({ name: 'bad', effects: [effect] }),
+  ).rejects.toThrow(/not writable|requires color/);
+  expect(creations()).toBe(0);
+});
+
+it('removes a newly created style if Figma rejects effects and rethrows the original error', async () => {
+  const { figma: f, style } = fakeFigma();
+  const failure = new Error('Figma rejected effects');
+  let removed = false;
+  Object.defineProperty(style, 'effects', {
+    set() {
+      throw failure;
+    },
+  });
+  style.remove = () => {
+    removed = true;
+  };
+  await expect(
+    createCreateEffectStyleHandler(f)({
+      name: 'bad',
+      effects: [{ type: 'LAYER_BLUR', visible: true, radius: 2 }],
+    }),
+  ).rejects.toBe(failure);
+  expect(removed).toBe(true);
+});
+
+it('reports both the original error and the cleanup error if removal also fails', async () => {
+  const { figma: f, style } = fakeFigma();
+  const failure = new Error('Figma rejected effects');
+  const cleanupFailure = new Error('Figma rejected removal');
+  Object.defineProperty(style, 'effects', {
+    set() {
+      throw failure;
+    },
+  });
+  style.remove = () => {
+    throw cleanupFailure;
+  };
+  const result = createCreateEffectStyleHandler(f)({
+    name: 'bad',
+    effects: [{ type: 'LAYER_BLUR', visible: true, radius: 2 }],
+  });
+  await expect(result).rejects.toMatchObject({ errors: [failure, cleanupFailure] });
+  await expect(result).rejects.toThrow(/Figma rejected effects.*Figma rejected removal/);
+});

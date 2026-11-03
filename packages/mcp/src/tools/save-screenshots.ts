@@ -11,12 +11,14 @@ import {
 import { z } from 'zod';
 
 import { binaryPayload } from './binary-payload.js';
+import { exportOptionsShape } from './export-settings-schema.js';
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_SCREENSHOTS_TOOL_NAME = 'save_screenshots';
 
 const inputSchema = z.object({
+  ...exportOptionsShape,
   nodeIds: z.array(z.string()).describe('Figma node ids to export'),
   outDir: z.string().describe('Directory to write files into (created if missing)'),
   format: z
@@ -29,6 +31,7 @@ const inputSchema = z.object({
 export const saveScreenshotsTool: ToolSpec = {
   name: SAVE_SCREENSHOTS_TOOL_NAME,
   description:
+    'Export options: constraint overrides scale for PNG/JPG (WIDTH/HEIGHT in pixels); SVG options apply only to SVG. contentsOnly/useAbsoluteBounds/colorProfile apply to all formats. suffix is export metadata; disk filenames remain node ids. Invalid format-specific options are rejected. ' +
     'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path, recovered?, empty? }] }. ' +
     'format is PNG (default) / JPG / SVG; scale applies to raster formats (default 1). ' +
     'path is null for missing or non-exportable nodes. Nodes that are fully clipped or off-canvas ' +
@@ -93,6 +96,9 @@ export const handleSaveScreenshots = async (
   // Always pass an explicit scale: an omitted scale makes get_screenshot auto-fit the raster for
   // model consumption, but files written to disk are user artifacts and must stay full-res.
   screenshotArgs.scale = args.scale ?? 1;
+  for (const key of Object.keys(exportOptionsShape) as (keyof typeof exportOptionsShape)[]) {
+    if (args[key] !== undefined) screenshotArgs[key] = args[key];
+  }
 
   const { images } = (await dispatch(
     GET_SCREENSHOT_TOOL_NAME,

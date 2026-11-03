@@ -15,6 +15,7 @@ export const toFigmaPaint = (paint: SerializedPaint, figmaCtx: typeof figma): Pa
     return {
       type: 'SOLID',
       color: toDocumentRgb(figmaCtx, paint.color, 'SOLID'),
+      ...(paint.blendMode === undefined ? {} : { blendMode: paint.blendMode as BlendMode }),
       opacity: paint.opacity,
       visible: paint.visible,
     };
@@ -38,6 +39,7 @@ export const toFigmaPaint = (paint: SerializedPaint, figmaCtx: typeof figma): Pa
         color: toDocumentRgba(figmaCtx, s.color, paint.type),
       })),
       gradientTransform: paint.gradientTransform as unknown as Transform,
+      ...(paint.blendMode === undefined ? {} : { blendMode: paint.blendMode as BlendMode }),
       opacity: paint.opacity,
       visible: paint.visible,
     } as GradientPaint;
@@ -57,6 +59,7 @@ export const toFigmaPaint = (paint: SerializedPaint, figmaCtx: typeof figma): Pa
       spacing: pattern.spacing ?? { x: 0, y: 0 },
       horizontalAlignment: pattern.horizontalAlignment ?? 'START',
       verticalAlignment: pattern.verticalAlignment ?? 'START',
+      ...(paint.blendMode === undefined ? {} : { blendMode: paint.blendMode as BlendMode }),
       opacity: paint.opacity,
       visible: paint.visible,
     } as unknown as Paint;

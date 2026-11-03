@@ -219,3 +219,56 @@ describe('set_image_fill in a batch', () => {
     expect(node.fillStyleId).toBe('S:surface');
   });
 });
+
+it('overlays only supplied image adjustments, validates modes and rolls back new metadata', async () => {
+  const node = frame([CROPPED]);
+  const { figmaCtx, createImage } = makeFigma({ '1:1': node });
+  const set = createSetImageFillHandler(figmaCtx);
+  const transform = [
+    [0.8, 0, 0.2],
+    [0, 0.7, 0.3],
+  ];
+  await set({
+    nodeId: '1:1',
+    data: 'abcd',
+    filters: { contrast: 0.5 },
+    imageTransform: transform,
+    blendMode: 'SCREEN',
+  });
+  expect((node.fills as unknown[])[0]).toMatchObject({
+    filters: { exposure: 0.2, contrast: 0.5 },
+    imageTransform: transform,
+    blendMode: 'SCREEN',
+  });
+  const before = structuredClone(node.fills);
+  const batch = createBatchHandler(figmaCtx, {
+    set_image_fill: set,
+    set_opacity: async () => {
+      throw new Error('fail');
+    },
+  });
+  // capture requires an opacity-bearing node on the later operation.
+  Object.assign(node, { opacity: 1 });
+  await expect(
+    batch({
+      ops: [
+        {
+          tool: 'set_image_fill',
+          params: {
+            nodeId: '1:1',
+            data: 'xyz',
+            scaleMode: 'TILE',
+            scalingFactor: 0.5,
+            rotation: 90,
+          },
+        },
+        { tool: 'set_opacity', params: { nodeId: '1:1', opacity: 0.2 } },
+      ],
+    }),
+  ).rejects.toThrow('fail');
+  expect(node.fills).toEqual(before);
+  const count = createImage.mock.calls.length;
+  await expect(set({ nodeId: '1:1', data: 'x', rotation: 45 })).rejects.toThrow('rotation');
+  await expect(set({ nodeId: '1:1', data: 'x', scalingFactor: 2 })).rejects.toThrow('TILE');
+  expect(createImage.mock.calls.length).toBe(count);
+});

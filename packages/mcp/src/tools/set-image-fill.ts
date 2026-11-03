@@ -36,6 +36,35 @@ export const setImageFillTool: ToolSpec = {
       .min(0)
       .optional()
       .describe('Fill to replace, 0 = bottom (default: the topmost IMAGE fill, else add on top)'),
+    filters: z
+      .object({
+        exposure: z.number().min(-1).max(1).optional(),
+        contrast: z.number().min(-1).max(1).optional(),
+        saturation: z.number().min(-1).max(1).optional(),
+        temperature: z.number().min(-1).max(1).optional(),
+        tint: z.number().min(-1).max(1).optional(),
+        highlights: z.number().min(-1).max(1).optional(),
+        shadows: z.number().min(-1).max(1).optional(),
+      })
+      .optional()
+      .describe('Image filter sliders, -1..1; merges supplied sliders into existing filters'),
+    imageTransform: z
+      .array(z.array(z.number()).min(3).max(3))
+      .min(2)
+      .max(2)
+      .optional()
+      .describe('2x3 affine transform; requires effective scaleMode CROP'),
+    rotation: z
+      .number()
+      .int()
+      .optional()
+      .describe('Degrees in increments of 90; requires FILL/FIT/TILE'),
+    scalingFactor: z
+      .number()
+      .positive()
+      .optional()
+      .describe('Tile scale; requires effective scaleMode TILE'),
+    blendMode: z.string().optional().describe('Paint compositing mode, validated by Figma'),
     scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
   }),
   kind: 'write',

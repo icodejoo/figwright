@@ -6,6 +6,7 @@ import {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { validateExportOptions } from './export-settings.js';
 
 const isFormat = (value: unknown): value is ScreenshotFormat =>
   typeof value === 'string' && (SCREENSHOT_FORMATS as readonly string[]).includes(value);
@@ -120,6 +121,14 @@ export const createGetScreenshotHandler =
       scale?: unknown;
       forVision?: unknown;
       binary?: unknown;
+      constraint?: ExportSettingsConstraints;
+      contentsOnly?: boolean;
+      useAbsoluteBounds?: boolean;
+      suffix?: string;
+      svgOutlineText?: boolean;
+      svgIdAttribute?: boolean;
+      svgSimplifyStroke?: boolean;
+      colorProfile?: 'DOCUMENT' | 'SRGB' | 'DISPLAY_P3_V4';
     };
     if (
       !Array.isArray(p.nodeIds) ||
@@ -138,6 +147,7 @@ export const createGetScreenshotHandler =
     }
 
     const format: ScreenshotFormat = isFormat(p.format) ? p.format : 'PNG';
+    validateExportOptions(format, p);
     // Omitted scale auto-fits per node (see autoFitScale); explicit scale is honored, capped only
     // when forVision says the raster is going into a model's context (see resolveScale).
     const requestedScale = typeof p.scale === 'number' ? p.scale : undefined;
@@ -155,14 +165,55 @@ export const createGetScreenshotHandler =
         : { nodeId, format, base64: figmaCtx.base64Encode(bytes) };
     // useAbsoluteBounds renders the node at its own bounding box instead of its (clipped) render
     // region — see the recovery path below. We only ever turn it on for that recovery.
-    const makeSettings = (useAbsoluteBounds: boolean, scale: number): ExportSettings =>
-      format === 'SVG'
-        ? { format: 'SVG', ...(useAbsoluteBounds ? { useAbsoluteBounds } : {}) }
+    const makeSettings = (recover: boolean, scale: number): ExportSettings => {
+      const common = {
+        ...(p.contentsOnly === undefined ? {} : { contentsOnly: p.contentsOnly }),
+        ...(p.useAbsoluteBounds === undefined ? {} : { useAbsoluteBounds: p.useAbsoluteBounds }),
+        ...(recover ? { useAbsoluteBounds: true } : {}),
+        ...(p.suffix === undefined ? {} : { suffix: p.suffix }),
+        ...(p.colorProfile === undefined ? {} : { colorProfile: p.colorProfile }),
+      };
+      return format === 'SVG'
+        ? {
+            format,
+            ...common,
+            ...(p.svgOutlineText === undefined ? {} : { svgOutlineText: p.svgOutlineText }),
+            ...(p.svgIdAttribute === undefined ? {} : { svgIdAttribute: p.svgIdAttribute }),
+            ...(p.svgSimplifyStroke === undefined
+              ? {}
+              : { svgSimplifyStroke: p.svgSimplifyStroke }),
+          }
         : {
             format,
-            constraint: { type: 'SCALE', value: scale },
-            ...(useAbsoluteBounds ? { useAbsoluteBounds } : {}),
+            ...common,
+            constraint:
+              !forVision && p.constraint !== undefined
+                ? p.constraint
+                : { type: 'SCALE', value: scale },
           };
+    };
+    const scaleFor = (
+      box: { width: number; height: number } | null | undefined,
+      fit: boolean,
+      ceiling: number,
+    ): number => {
+      let requested = requestedScale;
+      if (p.constraint !== undefined) {
+        if (p.constraint.type === 'SCALE') requested = p.constraint.value;
+        else {
+          if (box == null) {
+            if (!forVision) return 1; // Native WIDTH/HEIGHT can export pages without geometry.
+            throw new Error(
+              'get_screenshot: WIDTH/HEIGHT constraint requires known bounds for vision capping',
+            );
+          }
+          const edge = p.constraint.type === 'WIDTH' ? box.width : box.height;
+          if (!(edge > 0)) throw new Error('get_screenshot: WIDTH/HEIGHT requires nonzero bounds');
+          requested = p.constraint.value / edge;
+        }
+      }
+      return resolveScale(box, requested, forVision, fit, ceiling);
+    };
 
     const ids = p.nodeIds as readonly string[];
     // A batch past the many-image threshold has to clear the stricter per-image limit or the provider
@@ -184,8 +235,11 @@ export const createGetScreenshotHandler =
         if (geom.absoluteRenderBounds !== null) {
           // The render bounds are what this path exports; PAGE/DOCUMENT lack them → fall back to the
           // bounding box, else give up on fitting/reporting and export at 1x like before.
-          const box = geom.absoluteRenderBounds ?? geom.absoluteBoundingBox;
-          const scale = resolveScale(box, requestedScale, forVision, true, ceiling);
+          const box =
+            p.useAbsoluteBounds === true
+              ? geom.absoluteBoundingBox
+              : (geom.absoluteRenderBounds ?? geom.absoluteBoundingBox);
+          const scale = scaleFor(box, true, ceiling);
           const bytes = await node.exportAsync(makeSettings(false, scale));
           const image = exported(nodeId, bytes);
           attachRasterDims(image, box, scale);
@@ -201,7 +255,7 @@ export const createGetScreenshotHandler =
         const recoverable =
           geom.visible !== false && box != null && box.width > 0 && box.height > 0;
         // A blank isn't worth fitting — keep it at 1x unless the caller asked for a scale.
-        const scale = resolveScale(box, requestedScale, forVision, recoverable, ceiling);
+        const scale = scaleFor(box, recoverable, ceiling);
         const bytes = await node.exportAsync(makeSettings(recoverable, scale));
         const image = exported(nodeId, bytes);
         if (recoverable) image.recovered = true;

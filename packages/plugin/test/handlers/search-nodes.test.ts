@@ -181,3 +181,29 @@ describe('search_nodes handler', () => {
     await expect(handler({ type: 123 })).rejects.toThrow(/type/);
   });
 });
+
+it('combines data key OR criteria with name/type AND without escaping the requested scope', async () => {
+  const nodes = tree();
+  for (const n of [nodes[0]!, ...(nodes[0]! as FrameNode).children, nodes[1]!]) {
+    Object.assign(n, {
+      getPluginDataKeys: () => (n.id === '1:2' ? ['tag', 'other'] : []),
+      getSharedPluginDataKeys: (ns: string) =>
+        ns === 'figwright' && n.id === '1:2' ? ['shared'] : [],
+    });
+  }
+  const handler = createSearchNodesHandler(fakeFigma(nodes));
+  expect(
+    (
+      (await handler({
+        pluginData: { keys: ['absent', 'tag'] },
+        sharedPluginData: { namespace: 'figwright' },
+        type: 'TEXT',
+        name: 'button',
+      })) as SearchNodesResult
+    ).nodes.map(n => n.id),
+  ).toEqual(['1:2']);
+  expect(((await handler({ pluginData: { keys: [] } })) as SearchNodesResult).nodes).toEqual([]);
+  expect(
+    ((await handler({ sharedPluginData: { namespace: 'other' } })) as SearchNodesResult).nodes,
+  ).toEqual([]);
+});

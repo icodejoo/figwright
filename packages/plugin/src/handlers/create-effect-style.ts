@@ -21,9 +21,22 @@ export const createCreateEffectStyleHandler =
     );
 
     const style = figmaCtx.createEffectStyle();
-    style.name = p.name;
-    style.effects = effects;
-    if (typeof p.description === 'string') style.description = p.description;
+    try {
+      style.effects = effects;
+      style.name = p.name;
+      if (typeof p.description === 'string') style.description = p.description;
+    } catch (error) {
+      try {
+        style.remove();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          `create_effect_style: ${String(error)}; removing failed style ${style.id} also failed: ${String(cleanupError)}`,
+          { cause: cleanupError },
+        );
+      }
+      throw error;
+    }
 
     const result: StyleResult = { ok: true, styleId: style.id, name: style.name };
     return result;

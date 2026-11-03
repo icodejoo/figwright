@@ -130,6 +130,32 @@ export interface PaintOwnerSize {
  * explicit `null` turns that omission into a type error instead.
  */
 export const serializePaint = (paint: Paint, ownerSize: PaintOwnerSize | null): SerializedPaint => {
+  const out = serializePaintValue(paint, ownerSize);
+  if (paint.blendMode !== undefined && paint.blendMode !== 'NORMAL')
+    out.blendMode = paint.blendMode;
+  if (
+    (paint.type === 'IMAGE' || paint.type === 'VIDEO') &&
+    (out.type === 'IMAGE' || out.type === 'VIDEO')
+  ) {
+    if (paint.filters !== undefined) {
+      const entries = Object.entries(paint.filters).filter(
+        ([, v]) => typeof v === 'number' && v !== 0,
+      );
+      if (entries.length > 0) out.filters = Object.fromEntries(entries);
+    }
+    // CROP rotation is automatic; only TILE has an independently meaningful scale.
+    if (paint.scaleMode !== 'CROP' && paint.rotation !== undefined && paint.rotation !== 0)
+      out.rotation = paint.rotation;
+    if (
+      paint.scaleMode === 'TILE' &&
+      paint.scalingFactor !== undefined &&
+      paint.scalingFactor !== 1
+    )
+      out.scalingFactor = paint.scalingFactor;
+  }
+  return out;
+};
+const serializePaintValue = (paint: Paint, ownerSize: PaintOwnerSize | null): SerializedPaint => {
   const visible = paint.visible ?? true;
   const opacity = paint.opacity ?? 1;
   if (paint.type === 'SOLID') {
@@ -1383,9 +1409,8 @@ const rgbaOf = (c: RGBA): NonNullable<SerializedEffect['color']> => ({
  *
  * - `noiseSize` is the X alone; the Y is only in `noiseSizeVector`, so with X 5 / Y 10 the scalar
  *   reads 5. The vector is the size; the scalar stands in only where no vector is reported.
- * - A MULTITONE effect still reports a `color`, but the panel has no colour row for it and the value
- *   does not move when the panel's opacity does — a leftover, not a setting, so it is left out
- *   rather than handed on as if the designer had chosen it.
+ * - A MULTITONE effect still requires `color` in the API even though the panel has no colour row and
+ *   it does not move with opacity. Preserve it so the effect can be written back.
  * - `blendMode` is declared, but no noise object carries it, not even after a blend mode is picked
  *   from the panel, and Figma rejects the key when an effect is written. It cannot be read, so it
  *   is not emitted.
@@ -1402,7 +1427,7 @@ const serializeNoise = (noise: NoiseEffect): Partial<SerializedEffect> => {
     density: noise.density,
   };
   if (noise.noiseType === 'MULTITONE') out.opacity = noise.opacity;
-  else out.color = rgbaOf(noise.color);
+  out.color = rgbaOf(noise.color);
   if (noise.noiseType === 'DUOTONE') out.secondaryColor = rgbaOf(noise.secondaryColor);
   return out;
 };

@@ -1,5 +1,5 @@
 import type { CreateResult } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createAddPageHandler } from '../../src/handlers/add-page.js';
 
@@ -22,4 +22,43 @@ describe('add_page handler', () => {
     const result = (await createAddPageHandler(f)({})) as CreateResult;
     expect(result).toEqual({ ok: true, nodeId: 'P:1', name: 'Page 1', type: 'PAGE' });
   });
+});
+
+it('creates a divider through the dedicated API and preserves native page limit errors', async () => {
+  const page = { id: 'divider', name: '---', type: 'PAGE' };
+  const ctx = {
+    createPageDivider: (name?: string) => ({ ...page, name: name ?? page.name }),
+  } as unknown as typeof figma;
+  expect(await createAddPageHandler(ctx)({ divider: true })).toEqual({
+    ok: true,
+    nodeId: 'divider',
+    name: '---',
+    type: 'PAGE',
+  });
+  expect(await createAddPageHandler(ctx)({ divider: true, name: '***' })).toEqual({
+    ok: true,
+    nodeId: 'divider',
+    name: '***',
+    type: 'PAGE',
+  });
+  const restricted = {
+    createPageDivider: () => {
+      throw new Error('The Starter plan only comes with 3 pages');
+    },
+  } as unknown as typeof figma;
+  await expect(createAddPageHandler(restricted)({ divider: true })).rejects.toThrow('Starter');
+});
+
+it('refuses a divider name that would silently become an ordinary page', async () => {
+  const createPage = vi.fn<() => void>();
+  const createPageDivider = vi.fn<() => void>();
+  const ctx = { createPage, createPageDivider } as unknown as typeof figma;
+  await expect(createAddPageHandler(ctx)({ divider: true, name: 'abc' })).rejects.toThrow(
+    /all asterisks/,
+  );
+  await expect(createAddPageHandler(ctx)({ divider: true, name: '*-' })).rejects.toThrow(
+    /all asterisks/,
+  );
+  expect(createPage).not.toHaveBeenCalled();
+  expect(createPageDivider).not.toHaveBeenCalled();
 });

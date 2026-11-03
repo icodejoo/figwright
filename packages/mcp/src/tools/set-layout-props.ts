@@ -24,6 +24,20 @@ export const setLayoutPropsTool: ToolSpec = {
     'field may be omitted to leave it unchanged. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Node id — a frame-like container, or an auto-layout child'),
+    overflowDirection: z
+      .enum(['NONE', 'HORIZONTAL', 'VERTICAL', 'BOTH'])
+      .optional()
+      .describe(
+        'Frame prototype scrolling direction; only frame-like nodes supporting prototyping.',
+      ),
+    numberOfFixedChildren: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        'Topmost children fixed while scrolling, at most children.length; Figma may reject unsupported layout contexts.',
+      ),
     clipsContent: z.boolean().optional().describe('Clip children to the container bounds'),
     layoutSizingHorizontal: z
       .enum(['FIXED', 'HUG', 'FILL'])

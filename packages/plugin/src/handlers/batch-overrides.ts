@@ -63,6 +63,8 @@ const SIMPLE_FIELDS = new Set([
   'effects',
   'layoutGrids',
   'exportSettings',
+  'overflowDirection',
+  'numberOfFixedChildren',
   'layoutMode',
   'layoutWrap',
   'paddingLeft',

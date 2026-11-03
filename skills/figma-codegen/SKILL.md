@@ -224,3 +224,5 @@ animation is a fidelity miss, the same class as dropping a shadow.
   looks like the fix and isn't, and what `&` is still the right tool for.
 - **Render and verify before you call it done.** (See `references/verify.md`.)
 - Never write a config file or wizard prompt; everything is inferred from the project + the tools.
+
+Paint blendMode is the paint’s own compositing mode. Image/video filters retain non-default adjustments; rotation is reported for TILE/FILL/FIT and scalingFactor only for TILE; filtersApplied still means original bytes need the composited export to preserve grading.

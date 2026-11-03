@@ -53,6 +53,10 @@ export const paintItemSchema = z
       .array(z.array(z.number()))
       .describe('2×3 affine matrix (two rows of three) positioning the gradient')
       .optional(),
+    blendMode: z
+      .string()
+      .optional()
+      .describe('Paint compositing mode, e.g. MULTIPLY; Figma rejects unsupported modes'),
     opacity: z.number().optional(),
     visible: z.boolean().optional(),
     // The opacity rule is Figma's, measured on every tool that takes this schema (set_fills,

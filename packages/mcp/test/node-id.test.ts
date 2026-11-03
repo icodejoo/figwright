@@ -111,6 +111,7 @@ describe('normalizeIdArgs', () => {
     // classified: either a canvas node id (listed in STRING_ID_FIELDS) or a non-canvas id
     // namespace (allowlisted below, never URL-pasteable). Nested ids stay out of scope by design.
     const NON_CANVAS_ID_FIELDS = new Set([
+      'targetId', // polymorphic plugin-data target; normalized only when targetType is NODE (tested below)
       'styleId', // shared-style ids (S:…)
       'afterStyleId', // style-order reference, same non-canvas namespace as styleId
       'variableId', // variable ids (VariableID:…)
@@ -132,4 +133,17 @@ describe('normalizeIdArgs', () => {
     }
     expect(offenders).toEqual([]);
   });
+});
+
+it('normalizes polymorphic plugin-data targets only in the canvas node namespace', () => {
+  expect(
+    normalizeIdArgs({
+      targetType: 'NODE',
+      targetId: 'https://www.figma.com/design/key/name?node-id=12-34',
+    }),
+  ).toEqual({ targetType: 'NODE', targetId: '12:34' });
+  for (const targetType of ['STYLE', 'VARIABLE', 'VARIABLE_COLLECTION']) {
+    const args = { targetType, targetId: '12-34' };
+    expect(normalizeIdArgs(args)).toBe(args);
+  }
 });

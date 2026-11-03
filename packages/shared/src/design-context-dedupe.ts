@@ -103,6 +103,9 @@ const simplifyShaderProperties = (
   });
 
 export interface SimplifiedPaint {
+  blendMode?: string;
+  filters?: Extract<SerializedPaint, { type: 'IMAGE' | 'VIDEO' }>['filters'];
+  rotation?: number;
   type: string;
   color?: string;
   gradientStops?: { position: number; color: string }[];
@@ -181,6 +184,18 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
   // photo or texture ships at full strength (measured: every pixel off; with it, none).
   if (paint.type !== 'SOLID' && !('gradientStops' in paint) && paint.opacity !== 1) {
     out.opacity = paint.opacity;
+  }
+  if (paint.blendMode !== undefined) out.blendMode = paint.blendMode;
+  if (paint.type === 'IMAGE' || paint.type === 'VIDEO') {
+    if (paint.filters !== undefined) out.filters = paint.filters;
+    if (paint.scaleMode !== 'CROP' && paint.rotation !== undefined && paint.rotation !== 0)
+      out.rotation = paint.rotation;
+    if (
+      paint.scaleMode === 'TILE' &&
+      paint.scalingFactor !== undefined &&
+      paint.scalingFactor !== 1
+    )
+      out.scalingFactor = paint.scalingFactor;
   }
   if (paint.visible === false) out.visible = false;
   return out;

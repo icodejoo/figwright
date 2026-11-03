@@ -113,6 +113,7 @@ const SolidPaintSchema = z.object({
   type: z.literal('SOLID'),
   visible: z.boolean(),
   opacity: z.number(),
+  blendMode: z.string().optional(),
   color: SerializedColorSchema,
   /** `{ color: variableId }` when the designer bound the paint's colour to a variable. */
   boundVariables: SerializedBindingsSchema.optional(),
@@ -136,6 +137,7 @@ const GradientPaintSchema = z.object({
   type: z.enum(['GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']),
   visible: z.boolean(),
   opacity: z.number(),
+  blendMode: z.string().optional(),
   gradientStops: z.array(SerializedColorStopSchema),
   gradientTransform: z.array(z.array(z.number())),
   /**
@@ -158,8 +160,22 @@ const GradientPaintSchema = z.object({
  */
 const OtherPaintSchema = z.object({
   type: z.enum(['IMAGE', 'VIDEO']),
+  filters: z
+    .object({
+      exposure: z.number().optional(),
+      contrast: z.number().optional(),
+      saturation: z.number().optional(),
+      temperature: z.number().optional(),
+      tint: z.number().optional(),
+      highlights: z.number().optional(),
+      shadows: z.number().optional(),
+    })
+    .optional(),
+  rotation: z.number().optional(),
+  scalingFactor: z.number().optional(),
   visible: z.boolean(),
   opacity: z.number(),
+  blendMode: z.string().optional(),
   scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
   /**
    * CROP only: the 2×3 matrix mapping the layer's 0–1 box into the image's 0–1 space — which part
@@ -193,6 +209,7 @@ const PatternPaintSchema = z.object({
   type: z.literal('PATTERN'),
   visible: z.boolean(),
   opacity: z.number(),
+  blendMode: z.string().optional(),
   sourceNodeId: z.string(),
   tileType: z.enum(['RECTANGULAR', 'HORIZONTAL_HEXAGONAL', 'VERTICAL_HEXAGONAL']),
   scalingFactor: z.number(),
@@ -210,6 +227,7 @@ const ShaderPaintSchema = z.object({
   type: z.literal('SHADER'),
   visible: z.boolean(),
   opacity: z.number(),
+  blendMode: z.string().optional(),
   /** The shader's id — the same one `listAvailableShaders` / `importShaderById` use. */
   shaderId: z.string(),
   /** Its property values, in the order Figma reports them; omitted when there are none. */
@@ -262,7 +280,7 @@ export const SerializedEffectSchema = z.object({
   shaderProperties: z.array(SerializedShaderPropertySchema).optional(),
   /**
    * NOISE effects only. MONOTONE grains in `color`; DUOTONE in `color` and `secondaryColor`;
-   * MULTITONE has no colour setting, so it carries no `color` — only `opacity`.
+   * MULTITONE retains the API-required `color` as well as its panel `opacity` for round-tripping.
    */
   noiseType: z.enum(['MONOTONE', 'DUOTONE', 'MULTITONE']).optional(),
   /** NOISE only: grain size on each axis, the panel's Noise size X / Y. */
@@ -1051,6 +1069,7 @@ export type FlowStartingPoint = z.infer<typeof FlowStartingPointSchema>;
 export const GetPagesResultSchema = z.object({
   pages: z.array(
     PageRefSchema.extend({
+      isPageDivider: z.literal(true).optional(),
       /**
        * `PageNode.flowStartingPoints`, in Figma's order; the first is the flow Presentation view
        * opens by default. Readable without loading the page, so listing it costs get_pages nothing

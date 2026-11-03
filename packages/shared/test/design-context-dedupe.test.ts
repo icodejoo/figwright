@@ -422,6 +422,7 @@ describe('dedupeStyles', () => {
           noiseSizeVector: { x: 4.5, y: 4.5 },
           density: 1,
           opacity: 0.7,
+          color: { r: 0, g: 0, b: 0, a: 0.25 },
         },
       ],
     };
@@ -442,6 +443,7 @@ describe('dedupeStyles', () => {
         noiseSizeVector: { x: 4.5, y: 4.5 },
         density: 1,
         opacity: 0.7,
+        color: '#00000040',
       },
     ]);
   });
@@ -744,4 +746,33 @@ describe('dedupeStyles — variable bindings stay out of the bundles', () => {
     ]);
     expect(Object.keys(globalVars.styles)).toHaveLength(1);
   });
+});
+
+it('filters automatic image/video scale and CROP rotation before deduplication', () => {
+  for (const type of ['IMAGE', 'VIDEO'] as const) {
+    for (const scaleMode of ['FILL', 'FIT', 'CROP', 'TILE'] as const) {
+      const { nodes, globalVars } = dedupeStyles([
+        {
+          id: 'media',
+          name: 'media',
+          type: 'RECTANGLE',
+          fills: [
+            {
+              type,
+              scaleMode,
+              visible: true,
+              opacity: 1,
+              scalingFactor: 0.5,
+              rotation: 90,
+            },
+          ],
+        },
+      ] as DesignContextNode[]);
+      const out = (globalVars.styles[nodes[0]!.fill!] as Record<string, unknown>[])[0];
+      expect(Object.hasOwn(out!, 'scalingFactor')).toBe(scaleMode === 'TILE');
+      expect(Object.hasOwn(out!, 'rotation')).toBe(scaleMode !== 'CROP');
+      expect(Reflect.get(out!, 'scalingFactor')).toBe(scaleMode === 'TILE' ? 0.5 : undefined);
+      expect(Reflect.get(out!, 'rotation')).toBe(scaleMode === 'CROP' ? undefined : 90);
+    }
+  }
 });

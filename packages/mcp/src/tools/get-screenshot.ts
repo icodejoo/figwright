@@ -5,6 +5,7 @@ import {
 } from '@figwright/shared';
 import { z } from 'zod';
 
+import { exportOptionsShape } from './export-settings-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const GET_SCREENSHOT_TOOL_NAME = 'get_screenshot';
@@ -12,6 +13,7 @@ export const GET_SCREENSHOT_TOOL_NAME = 'get_screenshot';
 export const getScreenshotTool: ToolSpec = {
   name: GET_SCREENSHOT_TOOL_NAME,
   description:
+    'Export options: constraint overrides scale for PNG/JPG (WIDTH/HEIGHT in pixels); SVG options apply only to SVG. contentsOnly/useAbsoluteBounds/colorProfile apply to all formats. suffix is export metadata; disk filenames remain node ids. Invalid format-specific options are rejected. ' +
     'Export nodes as images the model can see, one image block per node: { images: [{ nodeId, format, ' +
     'base64, width?, height?, scale?, recovered?, empty? }] }. format is PNG (default) / JPG / SVG. ' +
     'scale applies to raster formats; when omitted, each node is auto-fitted to a legible size ' +
@@ -30,6 +32,7 @@ export const getScreenshotTool: ToolSpec = {
     'states) are auto-recovered at their intrinsic bounds and flagged recovered:true. empty:true ' +
     'means the node genuinely renders nothing even unclipped (hidden / no content) so the export is blank.',
   inputSchema: z.object({
+    ...exportOptionsShape,
     nodeIds: z.array(z.string()).describe('Figma node ids to export'),
     format: z
       .enum(SCREENSHOT_FORMATS)

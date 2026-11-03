@@ -326,3 +326,45 @@ describe('get_screenshot handler', () => {
     await expect(handler({ nodeIds: ['1:1'], scale: 0 })).rejects.toThrow(/scale/);
   });
 });
+
+it('passes SVG controls/common options and rejects mismatches', async () => {
+  const calls: ExportCall[] = [];
+  const handler = createGetScreenshotHandler(fakeFigma({ '1:1': exportable('1:1', calls) }));
+  const options = {
+    format: 'SVG',
+    contentsOnly: false,
+    useAbsoluteBounds: true,
+    suffix: '@export',
+    svgOutlineText: false,
+    svgIdAttribute: true,
+    svgSimplifyStroke: false,
+    colorProfile: 'DISPLAY_P3_V4',
+  };
+  await handler({ nodeIds: ['1:1'], ...options });
+  expect(calls).toEqual([options]);
+  await expect(handler({ nodeIds: ['1:1'], format: 'JPG', svgOutlineText: false })).rejects.toThrow(
+    'SVG',
+  );
+});
+it('honors WIDTH/HEIGHT on disk and retains vision caps and raster dimensions', async () => {
+  const calls: ExportCall[] = [];
+  const node = Object.assign(exportable('1:1', calls), {
+    absoluteRenderBounds: { width: 100, height: 200 },
+    absoluteBoundingBox: { width: 90, height: 190 },
+  });
+  const handler = createGetScreenshotHandler(fakeFigma({ '1:1': node }));
+  const disk = (await handler({
+    nodeIds: ['1:1'],
+    constraint: { type: 'WIDTH', value: 500 },
+    binary: true,
+  })) as GetScreenshotResult;
+  expect(calls[0]?.constraint).toEqual({ type: 'WIDTH', value: 500 });
+  expect(disk.images[0]).toMatchObject({ width: 500, height: 1000, scale: 5 });
+  const vision = (await handler({
+    nodeIds: ['1:1'],
+    constraint: { type: 'HEIGHT', value: 10000 },
+    forVision: true,
+  })) as GetScreenshotResult;
+  expect(calls[1]?.constraint?.type).toBe('SCALE');
+  expect(vision.images[0]!.height!).toBeLessThanOrEqual(2576);
+});

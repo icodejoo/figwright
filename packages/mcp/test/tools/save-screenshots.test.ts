@@ -152,3 +152,42 @@ describe('handleSaveScreenshots', () => {
     );
   });
 });
+
+it('forwards every export option to the sandbox while keeping filesystem args on the server', async () => {
+  const args: unknown[] = [];
+  const dir = await makeDir();
+  await handleSaveScreenshots(
+    async (name, p) => {
+      expect(name).toBe('get_screenshot');
+      args.push(p);
+      return { images: [] };
+    },
+    {
+      nodeIds: ['x'],
+      outDir: dir,
+      format: 'SVG',
+      contentsOnly: false,
+      useAbsoluteBounds: true,
+      suffix: '@2x',
+      svgOutlineText: false,
+      svgIdAttribute: true,
+      svgSimplifyStroke: false,
+      colorProfile: 'SRGB',
+    },
+  );
+  expect(args).toEqual([
+    {
+      nodeIds: ['x'],
+      binary: true,
+      format: 'SVG',
+      scale: 1,
+      contentsOnly: false,
+      useAbsoluteBounds: true,
+      suffix: '@2x',
+      svgOutlineText: false,
+      svgIdAttribute: true,
+      svgSimplifyStroke: false,
+      colorProfile: 'SRGB',
+    },
+  ]);
+});

@@ -153,3 +153,60 @@ describe('set_layout_props handler', () => {
     ).rejects.toThrow(/HUG needs an auto-layout frame/);
   });
 });
+
+it('sets scroll direction and fixed child count, rejects unsupported nodes/counts before mutation and restores them in batch', async () => {
+  const { createBatchHandler } = await import('../../src/handlers/batch.js');
+  const { batch3Fake } = await import('./batch3-fake.js');
+  const node = {
+    id: 'x',
+    parent: null,
+    type: 'FRAME',
+    name: 'Frame',
+    layoutAlign: 'INHERIT',
+    overflowDirection: 'NONE',
+    numberOfFixedChildren: 0,
+    children: [{ id: 'child' }],
+  };
+  const { ctx } = batch3Fake({ x: node });
+  const set = createSetLayoutPropsHandler(ctx);
+  await set({ nodeId: 'x', overflowDirection: 'VERTICAL', numberOfFixedChildren: 1 });
+  expect(node).toMatchObject({ overflowDirection: 'VERTICAL', numberOfFixedChildren: 1 });
+  await expect(
+    set({ nodeId: 'x', overflowDirection: 'BOTH', numberOfFixedChildren: 2 }),
+  ).rejects.toThrow('children.length');
+  expect(node.overflowDirection).toBe('VERTICAL');
+  const batch = createBatchHandler(ctx, {
+    set_layout_props: set,
+    rename_page: async () => {
+      throw new Error('native failure');
+    },
+  });
+  const page = { id: 'p', type: 'PAGE', name: 'page' };
+  const { ctx: ctx2 } = batch3Fake({ x: node, p: page });
+  const batch2 = createBatchHandler(ctx2, {
+    set_layout_props: createSetLayoutPropsHandler(ctx2),
+    rename_page: async () => {
+      throw new Error('native failure');
+    },
+  });
+  await expect(
+    batch2({
+      ops: [
+        {
+          tool: 'set_layout_props',
+          params: { nodeId: 'x', overflowDirection: 'HORIZONTAL', numberOfFixedChildren: 0 },
+        },
+        { tool: 'rename_page', params: { pageId: 'p', name: 'bad' } },
+      ],
+    }),
+  ).rejects.toThrow('native failure');
+  expect(node).toMatchObject({ overflowDirection: 'VERTICAL', numberOfFixedChildren: 1 });
+  await expect(
+    createSetLayoutPropsHandler(fakeFigma({ x: { id: 'x', layoutAlign: 'INHERIT' } }))({
+      nodeId: 'x',
+      overflowDirection: 'VERTICAL',
+    }),
+  ).rejects.toThrow('does not support');
+  // Refuse invalid batches before applying any scrolling change.
+  await expect(batch({ ops: [] })).rejects.toThrow('not be empty');
+});

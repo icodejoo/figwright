@@ -51,6 +51,7 @@ import { createGetComponentApiHandler } from './get-component-api.js';
 import { createGetComponentInstancesHandler } from './get-component-instances.js';
 import { createGetDesignContextHandler } from './get-design-context.js';
 import { createGetDocumentHandler } from './get-document.js';
+import { createGetExportSettingsHandler } from './get-export-settings.js';
 import { createGetFontsHandler } from './get-fonts.js';
 import { createGetLocalComponentsHandler } from './get-local-components.js';
 import { createGetMetadataHandler } from './get-metadata.js';
@@ -60,6 +61,7 @@ import { createGetNodeMotionHandler } from './get-node-motion.js';
 import { createGetNodeHandler } from './get-node.js';
 import { createGetNodesInfoHandler } from './get-nodes-info.js';
 import { createGetPagesHandler } from './get-pages.js';
+import { createGetPluginDataHandler } from './get-plugin-data.js';
 import { createGetReactionsHandler } from './get-reactions.js';
 import { createGetScreenshotHandler } from './get-screenshot.js';
 import { createGetSelectionHandler } from './get-selection.js';
@@ -94,15 +96,18 @@ import { createResetSlotHandler } from './reset-slot.js';
 import { createResizeNodesHandler } from './resize-nodes.js';
 import { createRotateNodesHandler } from './rotate-nodes.js';
 import { createSaveImageFillsHandler } from './save-image-fills.js';
+import { createSaveVersionHandler } from './save-version.js';
 import { createScanNodesByTypesHandler } from './scan-nodes-by-types.js';
 import { createScanTextNodesHandler } from './scan-text-nodes.js';
 import { createSearchNodesHandler } from './search-nodes.js';
 import { createSetArcHandler } from './set-arc.js';
+import { createSetAspectRatioLockHandler } from './set-aspect-ratio-lock.js';
 import { createSetAutoLayoutHandler } from './set-auto-layout.js';
 import { createSetBlendModeHandler } from './set-blend-mode.js';
 import { createSetConstraintsHandler } from './set-constraints.js';
 import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
+import { createSetExportSettingsHandler } from './set-export-settings.js';
 import { createSetExposedInstanceHandler } from './set-exposed-instance.js';
 import { createSetFillsHandler } from './set-fills.js';
 import { createSetGridChildHandler } from './set-grid-child.js';
@@ -113,6 +118,8 @@ import { createSetLayoutPropsHandler } from './set-layout-props.js';
 import { createSetMaskHandler } from './set-mask.js';
 import { createSetNodeVariableModeHandler } from './set-node-variable-mode.js';
 import { createSetOpacityHandler } from './set-opacity.js';
+import { createSetPagePropsHandler } from './set-page-props.js';
+import { createSetPluginDataHandler } from './set-plugin-data.js';
 import { createSetPositionHandler } from './set-position.js';
 import { createSetReactionsHandler } from './set-reactions.js';
 import { createSetStrokesHandler } from './set-strokes.js';
@@ -240,6 +247,11 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     // Pages
     add_page: createAddPageHandler(figmaCtx),
     delete_page: createDeletePageHandler(figmaCtx),
+    set_page_props: createSetPagePropsHandler(figmaCtx),
+    save_version: createSaveVersionHandler(figmaCtx),
+    set_plugin_data: createSetPluginDataHandler(figmaCtx),
+    set_aspect_ratio_lock: createSetAspectRatioLockHandler(figmaCtx),
+    set_export_settings: createSetExportSettingsHandler(figmaCtx),
     rename_page: createRenamePageHandler(figmaCtx),
     navigate_to_page: createNavigateToPageHandler(figmaCtx),
     // Prototype + components
@@ -285,6 +297,8 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     scan_text_nodes: createScanTextNodesHandler(figmaCtx),
     scan_nodes_by_types: createScanNodesByTypesHandler(figmaCtx),
     get_styles: createGetStylesHandler(figmaCtx),
+    get_plugin_data: createGetPluginDataHandler(figmaCtx),
+    get_export_settings: createGetExportSettingsHandler(figmaCtx),
     get_variable_defs: createGetVariableDefsHandler(figmaCtx),
     get_local_components: createGetLocalComponentsHandler(figmaCtx),
     get_component_api: createGetComponentApiHandler(figmaCtx),

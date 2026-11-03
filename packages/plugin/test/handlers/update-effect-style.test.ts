@@ -68,3 +68,48 @@ describe('update_effect_style handler', () => {
     ]);
   });
 });
+
+it.each([
+  { type: 'GLASS', visible: true, splay: 0 },
+  { type: 'NOISE', visible: true, noiseType: 'MULTITONE', noiseSize: 2, density: 1, opacity: 0.5 },
+])('does not rename a style when effect conversion rejects $type', async effect => {
+  const style = { id: 'E:0', type: 'EFFECT', name: 'old', effects: [], description: 'keep' };
+  await expect(
+    createUpdateEffectStyleHandler(fakeFigma(style))({
+      styleId: 'E:0',
+      name: 'new',
+      description: 'new',
+      effects: [effect],
+    }),
+  ).rejects.toThrow(/not writable|requires color/);
+  expect(style).toEqual({
+    id: 'E:0',
+    type: 'EFFECT',
+    name: 'old',
+    effects: [],
+    description: 'keep',
+  });
+});
+
+it('does not rename a style when Figma rejects the converted effects', async () => {
+  const failure = new Error('Figma rejected effects');
+  const style = {
+    id: 'E:0',
+    type: 'EFFECT',
+    name: 'old',
+    description: 'keep',
+    set effects(_effects: unknown) {
+      throw failure;
+    },
+  };
+  await expect(
+    createUpdateEffectStyleHandler(fakeFigma(style))({
+      styleId: 'E:0',
+      name: 'new',
+      description: 'new',
+      effects: [{ type: 'LAYER_BLUR', visible: true, radius: 2 }],
+    }),
+  ).rejects.toBe(failure);
+  expect(style.name).toBe('old');
+  expect(style.description).toBe('keep');
+});

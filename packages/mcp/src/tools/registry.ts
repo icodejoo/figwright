@@ -59,6 +59,7 @@ import { getComponentApiTool } from './get-component-api.js';
 import { getComponentInstancesTool } from './get-component-instances.js';
 import { getDesignContextTool } from './get-design-context.js';
 import { getDocumentTool } from './get-document.js';
+import { getExportSettingsTool } from './get-export-settings.js';
 import { getFontsTool } from './get-fonts.js';
 import { getLocalComponentsTool } from './get-local-components.js';
 import { getMetadataTool } from './get-metadata.js';
@@ -68,6 +69,7 @@ import { getNodeMotionTool } from './get-node-motion.js';
 import { getNodeTool } from './get-node.js';
 import { getNodesInfoTool } from './get-nodes-info.js';
 import { getPagesTool } from './get-pages.js';
+import { getPluginDataTool } from './get-plugin-data.js';
 import { getReactionsTool } from './get-reactions.js';
 import { getScreenshotTool } from './get-screenshot.js';
 import { getSelectionTool } from './get-selection.js';
@@ -106,17 +108,20 @@ import { resizeNodesTool } from './resize-nodes.js';
 import { rotateNodesTool } from './rotate-nodes.js';
 import { saveImageFillsTool } from './save-image-fills.js';
 import { saveScreenshotsTool } from './save-screenshots.js';
+import { saveVersionTool } from './save-version.js';
 import { scanComponentsTool } from './scan-components.js';
 import { scanNodesByTypesTool } from './scan-nodes-by-types.js';
 import { scanTextNodesTool } from './scan-text-nodes.js';
 import { searchNodesTool } from './search-nodes.js';
 import { setArcTool } from './set-arc.js';
+import { setAspectRatioLockTool } from './set-aspect-ratio-lock.js';
 import { setAutoLayoutTool } from './set-auto-layout.js';
 import { setBlendModeTool } from './set-blend-mode.js';
 import { setComplexStrokeTool } from './set-complex-stroke.js';
 import { setConstraintsTool } from './set-constraints.js';
 import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
+import { setExportSettingsTool } from './set-export-settings.js';
 import { setExposedInstanceTool } from './set-exposed-instance.js';
 import { setFillsTool } from './set-fills.js';
 import { setGridChildTool } from './set-grid-child.js';
@@ -127,6 +132,8 @@ import { setLayoutPropsTool } from './set-layout-props.js';
 import { setMaskTool } from './set-mask.js';
 import { setNodeVariableModeTool } from './set-node-variable-mode.js';
 import { setOpacityTool } from './set-opacity.js';
+import { setPagePropsTool } from './set-page-props.js';
+import { setPluginDataTool } from './set-plugin-data.js';
 import { setPositionTool } from './set-position.js';
 import { setReactionsTool } from './set-reactions.js';
 import { setRepeatTool } from './set-repeat.js';
@@ -170,6 +177,8 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   getVectorTool,
   getMetadataTool,
   getPagesTool,
+  getExportSettingsTool,
+  getPluginDataTool,
   searchNodesTool,
   scanTextNodesTool,
   scanNodesByTypesTool,
@@ -237,6 +246,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   setGridChildTool,
   reorderGridTracksTool,
   setLayoutPropsTool,
+  setAspectRatioLockTool,
   setLayoutGridsTool,
   setBlendModeTool,
   setMaskTool,
@@ -282,6 +292,10 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   findReplaceTextTool,
   batchRenameNodesTool,
   addPageTool,
+  setPagePropsTool,
+  saveVersionTool,
+  setPluginDataTool,
+  setExportSettingsTool,
   deletePageTool,
   renamePageTool,
   navigateToPageTool,

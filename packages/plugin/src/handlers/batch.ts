@@ -41,6 +41,12 @@ import {
   isMotionNode,
   toPlainJson,
 } from './motion-shared.js';
+import {
+  pluginDataTarget,
+  readPluginData,
+  writePluginData,
+  type PluginDataParams,
+} from './plugin-data.js';
 import { siblingFolders, styleFolder, type StyleKind, styleOrderApi } from './style-order.js';
 import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
@@ -1039,7 +1045,11 @@ const layoutPropsInverse: BatchInverse = {
     const state: GeometryState = {
       id,
       geometry: captureGeometry(node as SceneNode),
-      props: await captureProps(figmaCtx, node, ['clipsContent']),
+      props: await captureProps(figmaCtx, node, [
+        'clipsContent',
+        'overflowDirection',
+        'numberOfFixedChildren',
+      ]),
       bindings: await captureBindings(figmaCtx, node, [
         'minWidth',
         'maxWidth',
@@ -2310,6 +2320,36 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_reactions: reactionsInverse('set_reactions'),
   remove_reactions: reactionsInverse('remove_reactions'),
   update_flows: updateFlowsInverse,
+  set_export_settings: propsInverse('set_export_settings', ['exportSettings']),
+  set_plugin_data: {
+    async capture(ctx, params) {
+      const p = params as PluginDataParams;
+      return readPluginData(await pluginDataTarget(ctx, p), p, p.key!);
+    },
+    async undo(ctx, params, state) {
+      const p = params as PluginDataParams;
+      writePluginData(await pluginDataTarget(ctx, p), p, state as string);
+    },
+  },
+  set_page_props: {
+    async capture(ctx, params) {
+      const p = params as { pageId: string };
+      const page = await ctx.getNodeByIdAsync(p.pageId);
+      if (page?.type !== 'PAGE') throw new Error('set_page_props: page not found');
+      return {
+        id: page.id,
+        order: ctx.root.children.map(childPage => childPage.id),
+        backgrounds: page.backgrounds,
+      };
+    },
+    async undo(ctx, _params, state) {
+      const s = state as { id: string; order: string[]; backgrounds: readonly Paint[] };
+      const page = await ctx.getNodeByIdAsync(s.id);
+      if (page?.type !== 'PAGE') throw new Error('set_page_props: rollback page missing');
+      page.backgrounds = s.backgrounds;
+      await restoreOrder(ctx, ctx.root.id, s.order);
+    },
+  },
   rename_page: propsInverse('rename_page', ['name'], { idKey: 'pageId' }),
   navigate_to_page: navigateInverse,
   // Motion (beta) — staggered authoring in one atomic, undoable call.
@@ -2324,6 +2364,9 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
  * either side without someone deciding which, and saying why when it is this one.
  */
 export const NON_BATCHABLE: Readonly<Record<string, string>> = {
+  save_version: 'version history cannot be deleted by the plugin API',
+  set_aspect_ratio_lock:
+    'targetAspectRatio is read-only; a previous arbitrary ratio cannot be faithfully restored',
   reorder_grid_tracks:
     'reordering tracks also moves any track a multi-track child spans, so a rollback cannot guarantee restoring those children; call reorder_grid_tracks on its own, outside the batch',
   reset_slot: 'resetting slot content can delete children whose original ids cannot be restored',

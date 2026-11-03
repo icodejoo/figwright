@@ -85,6 +85,13 @@ export const normalizeIdArgs = <T>(args: T): T => {
     }
   }
 
+  // Plugin-data target ids span four namespaces. Only NODE ids are canvas URLs;
+  // variable, collection and style ids must remain byte-for-byte unchanged.
+  if (record.targetType === 'NODE' && typeof record.targetId === 'string') {
+    const normalized = normalizeNodeId(record.targetId);
+    if (normalized !== record.targetId) ensure().targetId = normalized;
+  }
+
   if (Array.isArray(record.nodeIds)) {
     const ids = record.nodeIds;
     let changed = false;

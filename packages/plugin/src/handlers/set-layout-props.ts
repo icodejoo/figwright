@@ -43,6 +43,8 @@ export const createSetLayoutPropsHandler =
   async params => {
     const p = (params ?? {}) as {
       nodeId?: unknown;
+      overflowDirection?: OverflowDirection;
+      numberOfFixedChildren?: number;
       clipsContent?: unknown;
       layoutSizingHorizontal?: unknown;
       layoutSizingVertical?: unknown;
@@ -71,6 +73,21 @@ export const createSetLayoutPropsHandler =
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
     if (node === null) throw new Error(`set_layout_props: node ${p.nodeId} not found`);
+    for (const field of ['overflowDirection', 'numberOfFixedChildren'] as const) {
+      if (p[field] !== undefined && !(field in node))
+        throw new Error(`set_layout_props: node ${p.nodeId} does not support ${field}`);
+    }
+    if (
+      p.numberOfFixedChildren !== undefined &&
+      (!Number.isInteger(p.numberOfFixedChildren) ||
+        p.numberOfFixedChildren < 0 ||
+        !('children' in node) ||
+        p.numberOfFixedChildren > node.children.length)
+    ) {
+      throw new TypeError(
+        'set_layout_props: numberOfFixedChildren must be between 0 and children.length',
+      );
+    }
     if (p.clipsContent !== undefined && !('clipsContent' in node)) {
       throw new Error(`set_layout_props: node ${p.nodeId} does not support clipsContent`);
     }
@@ -126,6 +143,10 @@ export const createSetLayoutPropsHandler =
     if (typeof p.clipsContent === 'boolean') {
       (node as { clipsContent: boolean }).clipsContent = p.clipsContent;
     }
+    if (p.overflowDirection !== undefined)
+      (node as FrameNode).overflowDirection = p.overflowDirection;
+    if (p.numberOfFixedChildren !== undefined)
+      (node as FrameNode).numberOfFixedChildren = p.numberOfFixedChildren;
     const result: MutateResult = { ok: true, nodeId: node.id };
     return result;
   };

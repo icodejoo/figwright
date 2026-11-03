@@ -19,8 +19,32 @@ const rgba = z.object({
 /** One effect: DROP_SHADOW / INNER_SHADOW (color + offset) or LAYER_BLUR / BACKGROUND_BLUR (radius). */
 export const effectItemSchema = z
   .object({
-    type: z.enum(['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR']),
+    type: z.enum([
+      'DROP_SHADOW',
+      'INNER_SHADOW',
+      'LAYER_BLUR',
+      'BACKGROUND_BLUR',
+      'NOISE',
+      'TEXTURE',
+      'GLASS',
+    ]),
     visible: z.boolean(),
+    blurType: z.enum(['NORMAL', 'PROGRESSIVE']).optional(),
+    startRadius: z.number().min(0).optional(),
+    startOffset: z.object({ x: z.number(), y: z.number() }).optional(),
+    endOffset: z.object({ x: z.number(), y: z.number() }).optional(),
+    noiseType: z.enum(['MONOTONE', 'DUOTONE', 'MULTITONE']).optional(),
+    noiseSize: z.number().positive().optional(),
+    noiseSizeVector: z.object({ x: z.number().positive(), y: z.number().positive() }).optional(),
+    density: z.number().optional(),
+    secondaryColor: rgba.optional(),
+    opacity: z.number().min(0).max(1).optional(),
+    clipToShape: z.boolean().optional(),
+    lightIntensity: z.number().min(0).max(1).optional(),
+    lightAngle: z.number().optional(),
+    refraction: z.number().min(0).max(1).optional(),
+    depth: z.number().min(1).optional(),
+    dispersion: z.number().min(0).max(1).optional(),
     radius: z
       .number()
       .describe(
@@ -28,7 +52,11 @@ export const effectItemSchema = z
           'B is radius B ÷ 0.85 (measured).',
       )
       .optional(),
-    color: rgba.describe('Shadow color (RGBA 0–1). Required for shadows.').optional(),
+    color: rgba
+      .describe(
+        'Effect color (RGBA 0–1). Required for shadows and every NOISE variant, including MULTITONE.',
+      )
+      .optional(),
     offset: z
       .object({ x: z.number(), y: z.number() })
       .describe('Shadow offset in px. Required for shadows.')

@@ -17,6 +17,7 @@ export const createGetPagesHandler =
       pages: figmaCtx.root.children.map(p => ({
         id: p.id,
         name: p.name,
+        ...(p.isPageDivider === true ? { isPageDivider: true as const } : {}),
         flows: p.flowStartingPoints.map(f => ({ nodeId: f.nodeId, name: f.name })),
       })),
     };
