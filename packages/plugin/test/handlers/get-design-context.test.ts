@@ -653,6 +653,8 @@ describe('get_design_context handler', () => {
         id,
         type: 'INSTANCE',
         componentProperties: { Variant: { type: 'VARIANT', value: variant } },
+        isExposedInstance: true,
+        exposedInstances: [{ id: `${id}-nested` }],
         children: [node({ id: `${id}-child`, type: 'TEXT' })],
         getMainComponentAsync: async () => main,
       });
@@ -674,6 +676,10 @@ describe('get_design_context handler', () => {
     // second instance is deduped (children collapsed) yet KEEPS its distinct variant — the
     // constraint that lets component_map tell variants apart — and still carries the set.
     expect(result.nodes[1]?.deduped).toBe(true);
+    expect(result.nodes[0]?.isExposedInstance).toBe(true);
+    expect(result.nodes[1]?.isExposedInstance).toBe(true);
+    expect(result.nodes[0]?.exposedInstances).toEqual(['i1-nested']);
+    expect(result.nodes[1]?.exposedInstances).toEqual(['i2-nested']);
     expect(result.nodes[1]?.children).toBeUndefined();
     expect(result.nodes[1]?.componentProperties).toEqual({
       Variant: { type: 'VARIANT', value: 'outline' },

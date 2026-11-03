@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "fields": [
     "colorProfile",
     "globalVars",
@@ -145,6 +145,7 @@
     "nodes[].effects[].startRadius",
     "nodes[].effects[].type",
     "nodes[].effects[].visible",
+    "nodes[].exposedInstances",
     "nodes[].fill",
     "nodes[].fills",
     "nodes[].fills[].boundVariables",
@@ -232,6 +233,7 @@
     "nodes[].hyperlink.type",
     "nodes[].hyperlink.value",
     "nodes[].id",
+    "nodes[].isExposedInstance",
     "nodes[].isMask",
     "nodes[].layout",
     "nodes[].layout.counterAxisAlignContent",

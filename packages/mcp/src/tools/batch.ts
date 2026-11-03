@@ -17,7 +17,7 @@ export const batchTool: ToolSpec = {
     'Apply multiple write ops atomically (all-or-nothing with rollback). ops is an ordered list of ' +
     '{ tool, params } where tool is any write that can be undone exactly — property, text, layout, ' +
     'style, variable, component, structure and create writes (e.g. set_fills, set_text, ' +
-    'set_auto_layout, reparent_nodes, create_frame). Ops that delete something (delete_*, ' +
+    'set_auto_layout, set_exposed_instance, reparent_nodes, create_frame). Ops that delete something (delete_*, ' +
     'ungroup_nodes, detach_instance, remove_animation_style) are refused, since what they delete ' +
     'cannot come back under its id; so is reorder_grid_tracks, whose rollback cannot guarantee ' +
     'restoring children that span several tracks (call it on its own). Every op is captured from ' +

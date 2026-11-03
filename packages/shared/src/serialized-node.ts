@@ -749,6 +749,10 @@ export interface SerializedNode {
   scaleFactor?: number;
   /** Nonempty native Slot constraint violations. */
   limitViolations?: ('BELOW_MIN' | 'ABOVE_MAX' | 'HAS_NON_PREFERRED')[];
+  /** Present only when this instance is exposed to its containing component. */
+  isExposedInstance?: true;
+  /** Exposed nested instance ids, only when the API provides a nonempty list. */
+  exposedInstances?: string[];
   /**
    * Which component property drives this layer — present only on a sublayer inside a COMPONENT or
    * an INSTANCE, keyed by the field the property controls. The value is the property name carrying
@@ -909,6 +913,8 @@ export const SerializedNodeSchema = z.lazy(() =>
     mainComponent: SerializedMainComponentSchema.optional(),
     scaleFactor: z.number().optional(),
     limitViolations: z.array(z.enum(['BELOW_MIN', 'ABOVE_MAX', 'HAS_NON_PREFERRED'])).optional(),
+    isExposedInstance: z.literal(true).optional(),
+    exposedInstances: z.array(z.string()).optional(),
     componentPropertyReferences: z
       .object({
         visible: z.string().optional(),

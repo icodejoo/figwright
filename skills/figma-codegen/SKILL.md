@@ -34,7 +34,7 @@ Run the grounded tools against the selection, then generate — **trust them ove
 
 1. **`get_design_context`** (detail `full`, `dedupeComponents: true`) → the structural tree with
    tokens resolved to names (`Primary/500`, `spacing/4`), styles deduped into `globalVars`, and each
-   instance's `mainComponent` / `componentProperties`. This is the layout + binding source of truth.
+   instance's `mainComponent` / `componentProperties`. Exposure metadata (isExposedInstance: true; exposedInstances: nested instance ids) describes which nested component controls are surfaced in Figma’s outer instance panel. It does not change geometry or appearance; keep the nested component/property relationships when mapping to the project’s component API. This is the layout + binding source of truth.
    Keep `dedupeComponents: true` and don't depth-limit a subtree you'll build from.
    → **How to read the tree, the per-node fidelity catalog (effects, per-side borders, stroke align,
    per-corner radius, blend, masks, gradients, image-fit, patterns, Figma Draw repeat groups /

@@ -13,7 +13,10 @@ export const getComponentApiTool: ToolSpec = {
     '{ type (VARIANT|BOOLEAN|TEXT|INSTANCE_SWAP|SLOT), defaultValue, variantOptions?, preferredValues?, ' +
     'description?, slotSettings? }. Nonempty component description, documentationLinks and (only when it differs from description) descriptionMarkdown are included. SLOT content is edited as child nodes, never via set_instance_properties; slotContentId identifies its property binding. Property names come back verbatim for set_instance_properties: VARIANT by bare name ' +
     '(e.g. "Size"), BOOLEAN/TEXT/INSTANCE_SWAP suffixed with #id (e.g. "Label#2:0"). Unlike ' +
-    'get_local_components (a subtree inventory), this targets one component and is safe on large files.',
+    'get_local_components (a subtree inventory), this targets one component and is safe on large files. ' +
+    'Optional exposedInstances lists nested instance ids exposed on the requested node, when the API ' +
+    'provides a nonempty list (not ids on the resolved property owner). Use set_exposed_instance ' +
+    'on primary instances in the main component to change exposure.',
   inputSchema: z.object({
     nodeId: z
       .string()

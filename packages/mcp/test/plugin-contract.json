@@ -1234,6 +1234,7 @@
       "properties[key].type",
       "requestId"
     ],
+    "set_exposed_instance": ["exposed", "nodeId", "requestId"],
     "add_component_property": [
       "componentId",
       "defaultValue",

@@ -285,6 +285,11 @@ const textOnPath = base({
   textPathStartData: { segment: 1, position: 0.5 },
 });
 
+const exposed = base({
+  type: 'INSTANCE',
+  isExposedInstance: true,
+  exposedInstances: [{ id: 'nested' }],
+});
 const FIXTURES = [
   frameInGrid,
   arcWithConstraints,
@@ -298,6 +303,7 @@ const FIXTURES = [
     limitViolations: ['ABOVE_MAX'],
     componentPropertyReferences: { slotContentId: 'Content#1' },
   }),
+  exposed,
 ];
 
 // SerializedNodeSchema is exported as a recursive z.lazy — unwrap to the inner object for keys.

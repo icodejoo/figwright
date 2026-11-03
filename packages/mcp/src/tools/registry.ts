@@ -117,6 +117,7 @@ import { setComplexStrokeTool } from './set-complex-stroke.js';
 import { setConstraintsTool } from './set-constraints.js';
 import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
+import { setExposedInstanceTool } from './set-exposed-instance.js';
 import { setFillsTool } from './set-fills.js';
 import { setGridChildTool } from './set-grid-child.js';
 import { setImageFillTool } from './set-image-fill.js';
@@ -293,6 +294,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   createSlotTool,
   resetSlotTool,
   setInstancePropertiesTool,
+  setExposedInstanceTool,
   addComponentPropertyTool,
   bindComponentPropertyTool,
   editComponentPropertyTool,

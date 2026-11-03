@@ -41,8 +41,9 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * flags, the underline's style / offset / thickness / colour / skipInk, and openTypeFeatures — a v9
  * baseline holds such a node without them and would report each as changed.
  */
-// v11: native Slot violations / slotContentId references and the instance scale-tool factor.
-export const SNAPSHOT_FORMAT_VERSION = 11;
+// v12: v10 exposed nested instance metadata; v11 native Slot violations / slotContentId references
+// and the instance scale-tool factor. Recapture older baselines before comparison.
+export const SNAPSHOT_FORMAT_VERSION = 12;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

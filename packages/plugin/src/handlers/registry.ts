@@ -103,6 +103,7 @@ import { createSetBlendModeHandler } from './set-blend-mode.js';
 import { createSetConstraintsHandler } from './set-constraints.js';
 import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
+import { createSetExposedInstanceHandler } from './set-exposed-instance.js';
 import { createSetFillsHandler } from './set-fills.js';
 import { createSetGridChildHandler } from './set-grid-child.js';
 import { createSetImageFillHandler } from './set-image-fill.js';
@@ -247,6 +248,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     update_flows: createUpdateFlowsHandler(figmaCtx),
     swap_component: createSwapComponentHandler(figmaCtx),
     set_instance_properties: createSetInstancePropertiesHandler(figmaCtx),
+    set_exposed_instance: createSetExposedInstanceHandler(figmaCtx),
     add_component_property: createAddComponentPropertyHandler(figmaCtx),
     bind_component_property: createBindComponentPropertyHandler(figmaCtx),
     edit_component_property: createEditComponentPropertyHandler(figmaCtx),

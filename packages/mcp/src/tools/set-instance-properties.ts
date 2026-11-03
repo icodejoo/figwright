@@ -24,7 +24,8 @@ export const setInstancePropertiesTool: ToolSpec = {
     'property names from get_component_api, used verbatim: VARIANT by bare name (e.g. "Size": "Large"), ' +
     'BOOLEAN/TEXT/INSTANCE_SWAP suffixed with #id (e.g. "Label#2:0": "Sign in", "Disabled#1:2": true). ' +
     'An INSTANCE_SWAP value is the target component node id. Unspecified properties keep their value; ' +
-    'SLOT properties are not settable. Returns { ok, nodeId }.',
+    'SLOT properties are not settable. Use set_exposed_instance to expose nested instances ' +
+    '(isExposedInstance is not a component property). Returns { ok, nodeId }.',
   inputSchema: z.object({
     instanceId: z.string().describe('Instance node id to update'),
     properties: z

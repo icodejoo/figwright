@@ -2177,6 +2177,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_strokes: strokesInverse,
   set_opacity: propsInverse('set_opacity', ['opacity']),
   set_visible: propsInverse('set_visible', ['visible'], { resizes: true }),
+  set_exposed_instance: propsInverse('set_exposed_instance', ['isExposedInstance']),
   set_corner_radius: propsInverse('set_corner_radius', CORNERS),
   set_arc: propsInverse('set_arc', ['arcData']),
   set_blend_mode: propsInverse('set_blend_mode', ['blendMode']),

@@ -67,6 +67,14 @@ describe('get_component_api handler', () => {
     expect(empty).not.toHaveProperty('descriptionMarkdown');
     expect(empty).not.toHaveProperty('documentationLinks');
   });
+
+  it('reports exposure ids for the requested instance, not its resolved property owner', async () => {
+    const node = { ...instance, visible: true, exposedInstances: [{ id: 'nested' }] };
+    const result = await createGetComponentApiHandler(fakeFigma({ 'I:1': node }))({
+      nodeId: 'I:1',
+    });
+    expect(result).toMatchObject({ id: 'CS:1', exposedInstances: ['nested'] });
+  });
   it('returns a component set property API keyed verbatim', async () => {
     const result = (await createGetComponentApiHandler(fakeFigma({ 'CS:1': set }))({
       nodeId: 'CS:1',

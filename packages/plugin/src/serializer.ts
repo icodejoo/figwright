@@ -33,6 +33,7 @@ import {
   serializeComplexStroke,
   serializeVariableWidthStroke,
 } from './draw.js';
+import { readExposure } from './exposure.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
 import { boundingBoxOf, orientationOf } from './orientation.js';
 import { cssProgressiveBlurLayers } from './progressive-blur.js';
@@ -615,7 +616,7 @@ const enrichWithMixins = (
   base: SerializedNode,
   parent: BaseNode | null,
 ): SerializedNode => {
-  const out: SerializedNode = { ...base };
+  const out: SerializedNode = { ...base, ...readExposure(node) };
 
   if (node.type === 'INSTANCE' && typeof node.scaleFactor === 'number' && node.scaleFactor !== 1)
     out.scaleFactor = node.scaleFactor;

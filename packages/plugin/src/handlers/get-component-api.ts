@@ -1,6 +1,7 @@
 import type { ComponentPropertyApiEntry, GetComponentApiResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { readExposure } from '../exposure.js';
 import { componentDocumentation } from './component-documentation.js';
 
 /**
@@ -69,5 +70,9 @@ export const createGetComponentApiHandler =
       type: target.type,
       properties,
     };
+    if ('visible' in node) {
+      const { exposedInstances } = readExposure(node);
+      if (exposedInstances !== undefined) result.exposedInstances = exposedInstances;
+    }
     return result;
   };
