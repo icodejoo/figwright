@@ -43,6 +43,34 @@ const setup = (timeoutMs?: number): Harness => {
 };
 
 describe('createToolBridge', () => {
+  it('rejects a duplicate pending relay id without replacing its reply or timer', async () => {
+    const { bridge, sent, emit } = setup();
+    const first = bridge.handler('read', {}, 'relay-id');
+    await expect(bridge.handler('read', {}, 'relay-id')).rejects.toThrow(/duplicate in-flight/);
+    expect(sent).toHaveLength(1);
+    emit(createToolResult({ id: 'relay-id', result: 'first' }));
+    await expect(first).resolves.toBe('first');
+    expect(bridge.pendingCount()).toBe(0);
+    bridge.dispose();
+  });
+
+  it('ignores a late timed-out reply while a retry with a fresh id is pending', async () => {
+    vi.useFakeTimers();
+    const { bridge, emit } = setup(10);
+    try {
+      const first = bridge.handler('read', {}, 'attempt-1').catch((err: unknown) => err);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(await first).toEqual(new Error('sandbox tool timeout (method=read)'));
+      const retry = bridge.handler('read', {}, 'attempt-2');
+      emit(createToolResult({ id: 'attempt-1', result: 'late' }));
+      expect(bridge.pendingCount()).toBe(1);
+      emit(createToolResult({ id: 'attempt-2', result: 'retry' }));
+      await expect(retry).resolves.toBe('retry');
+    } finally {
+      bridge.dispose();
+      vi.useRealTimers();
+    }
+  });
   it('posts a tagged tool-call when handler is invoked', async () => {
     const { bridge, sent, emit } = setup();
     const promise = bridge.handler('ping', { foo: 1 });

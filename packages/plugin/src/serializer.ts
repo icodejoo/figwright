@@ -1088,8 +1088,10 @@ const serializeDecorationMetric = (metric: unknown): SerializedTextDecorationMet
 /**
  * The rarer node-level text settings: leading trim, list spacing, hanging flags, the decoration
  * details and the diverging OpenType features. Each goes out only off its default and only when
- * uniform (a `mixed` symbol is skipped, like `textWrapStyle`), so ordinary text serializes exactly
- * as before — the read half of set_text_properties' matching arguments.
+ * uniform. Known limitation: mixed values are omitted at node level and are not emitted in
+ * segments, as is also the case for paragraphSpacing / paragraphIndent. These extras do not trigger
+ * segments. Ordinary text serializes as before — the read half of set_text_properties' matching
+ * arguments.
  */
 const serializeTextExtras = (text: TextNode, out: SerializedNode): void => {
   const t = text as unknown as Record<string, unknown>;

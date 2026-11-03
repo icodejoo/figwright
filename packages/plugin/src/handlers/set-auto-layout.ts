@@ -6,6 +6,8 @@ const LAYOUT_MODES = new Set(['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID']);
 
 type AutoLayoutTarget = {
   layoutMode: string;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
   paddingTop: number;
   paddingRight: number;
   paddingBottom: number;
@@ -147,6 +149,21 @@ export const createSetAutoLayoutHandler =
             : undefined;
       rowSizes = parseGridTracks(p.gridRowSizes, 'gridRowSizes', rowsAuto ? undefined : rowCount);
       columnSizes = parseGridTracks(p.gridColumnSizes, 'gridColumnSizes', columnCount);
+      // GridTrackSize's typings forbid FLEX on a HUG axis. An existing GRID keeps its sizing;
+      // on a mode transition Figma chooses the resulting sizing, so leave that case to its setter.
+      if (wasGrid) {
+        for (const [key, sizes, sizing] of [
+          ['gridRowSizes', rowSizes, target.layoutSizingVertical],
+          ['gridColumnSizes', columnSizes, target.layoutSizingHorizontal],
+        ] as const) {
+          if (sizing === 'HUG' && sizes?.some(track => track.type === 'FLEX')) {
+            throw new Error(
+              `set_auto_layout: ${key} cannot contain FLEX while its container axis is HUG — ` +
+                'set that axis to FIXED or FILL first, or use FIXED / HUG tracks; nothing was changed',
+            );
+          }
+        }
+      }
       unverifiedSizes =
         (rowSizes !== undefined && (rowsAuto || rowCount === undefined)) ||
         (columnSizes !== undefined && columnCount === undefined);

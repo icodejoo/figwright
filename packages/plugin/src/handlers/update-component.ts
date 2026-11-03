@@ -65,10 +65,8 @@ export const createUpdateComponentHandler =
         // The links were refused after the description landed: put the description back, so the
         // call changes nothing. If even that fails, say so — both errors matter.
         try {
-          if (p.descriptionMarkdown !== undefined) {
+          if (p.descriptionMarkdown !== undefined || p.description !== undefined) {
             node.descriptionMarkdown = before.descriptionMarkdown;
-          } else if (p.description !== undefined) {
-            node.description = before.description;
           }
         } catch (restoreError) {
           throw new Error(

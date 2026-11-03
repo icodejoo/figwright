@@ -9,7 +9,12 @@ import { createAddVariableModeHandler } from '../../src/handlers/add-variable-mo
 import { createApplyAnimationStyleHandler } from '../../src/handlers/apply-animation-style.js';
 import { createApplyManualKeyframeTrackHandler } from '../../src/handlers/apply-manual-keyframe-track.js';
 import { createBatchRenameNodesHandler } from '../../src/handlers/batch-rename-nodes.js';
-import { SEGMENT_FIELDS, TEXT_RESTORED_FIELDS } from '../../src/handlers/batch-snapshot.js';
+import {
+  captureText,
+  restoreText,
+  SEGMENT_FIELDS,
+  TEXT_RESTORED_FIELDS,
+} from '../../src/handlers/batch-snapshot.js';
 import { createBatchHandler } from '../../src/handlers/batch.js';
 import { createBindVariableToNodeHandler } from '../../src/handlers/bind-variable-to-node.js';
 import { createCombineAsVariantsHandler } from '../../src/handlers/combine-as-variants.js';
@@ -46,6 +51,7 @@ import { createSetVariableCodeSyntaxHandler } from '../../src/handlers/set-varia
 import { createSetVariableValueHandler } from '../../src/handlers/set-variable-value.js';
 import { createSetVisibleHandler } from '../../src/handlers/set-visible.js';
 import { createSwapComponentHandler } from '../../src/handlers/swap-component.js';
+import type { TextLike } from '../../src/handlers/text-like.js';
 import { createSetTextPathHandler } from '../../src/handlers/text-path.js';
 import { createUpdateFlowsHandler } from '../../src/handlers/update-flows.js';
 import { createUpdatePaintStyleHandler } from '../../src/handlers/update-paint-style.js';
@@ -111,6 +117,218 @@ const realWrites = (figmaCtx: typeof figma): SandboxHandlers => ({
 });
 
 const SOLID = (r: number): unknown => ({ type: 'SOLID', color: { r, g: 0, b: 0 } });
+
+describe('batch failed-op recovery', () => {
+  it('restores a partially edited property using the original id when no result was returned', async () => {
+    const definition = { type: 'TEXT', defaultValue: 'before' };
+    const editComponentProperty = vi.fn<(id: string, changes: { defaultValue?: string }) => string>(
+      (id, changes) => {
+        if (changes.defaultValue !== undefined) definition.defaultValue = changes.defaultValue;
+        if (changes.defaultValue === 'after') throw new Error('native edit failed');
+        return id;
+      },
+    );
+    const { figmaCtx } = makeFigma({
+      C: {
+        id: 'C',
+        type: 'COMPONENT',
+        parent: null,
+        componentPropertyDefinitions: { 'Label#1:0': definition },
+        editComponentProperty,
+      },
+    });
+    await expect(
+      createBatchHandler(figmaCtx, {
+        edit_component_property: createEditComponentPropertyHandler(figmaCtx),
+      })({
+        ops: [
+          {
+            tool: 'edit_component_property',
+            params: {
+              componentId: 'C',
+              propertyId: 'Label#1:0',
+              defaultValue: 'after',
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/native edit failed; failed op recovery: restored captured state/);
+    expect(definition.defaultValue).toBe('before');
+    expect(editComponentProperty).toHaveBeenLastCalledWith('Label#1:0', { defaultValue: 'before' });
+  });
+
+  it('restores padding and row tracks after the column setter rejects midway', async () => {
+    const originalRows = [{ type: 'FIXED', value: 20 }];
+    const originalColumns = [{ type: 'FIXED', value: 30 }];
+    let columns = originalColumns;
+    const node = {
+      id: 'G',
+      type: 'FRAME',
+      parent: null,
+      children: [],
+      layoutMode: 'GRID',
+      gridRowCount: 1,
+      gridColumnCount: 1,
+      gridAutoTracks: 'NONE',
+      gridItemsPositioning: 'ROW_AUTO_FLOW',
+      gridRowGap: 0,
+      gridColumnGap: 0,
+      layoutSizingHorizontal: 'FIXED',
+      layoutSizingVertical: 'FIXED',
+      paddingLeft: 4,
+      gridRowSizes: originalRows,
+      get gridColumnSizes() {
+        return columns;
+      },
+      set gridColumnSizes(v) {
+        if (v.some(t => t.value === 99)) throw new Error('native column refusal');
+        columns = v;
+      },
+    };
+    const { figmaCtx } = makeFigma({ G: node });
+    await expect(
+      createBatchHandler(figmaCtx, {
+        set_auto_layout: createSetAutoLayoutHandler(figmaCtx),
+      })({
+        ops: [
+          {
+            tool: 'set_auto_layout',
+            params: {
+              nodeId: 'G',
+              layoutMode: 'GRID',
+              paddingLeft: 40,
+              gridRowSizes: [{ type: 'FIXED', value: 50 }],
+              gridColumnSizes: [{ type: 'FIXED', value: 99 }],
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(
+      /rolled back 0 applied op\(s\): native column refusal; failed op recovery: restored captured state/,
+    );
+    expect(node.paddingLeft).toBe(4);
+    expect(node.gridRowSizes).toEqual(originalRows);
+    expect(node.gridColumnSizes).toEqual(originalColumns);
+  });
+
+  it.each(['create_frame', 'create_slot', 'create_paint_style'])(
+    'skips result-dependent undo for a failed %s without looking up undefined or deleting nodes',
+    async tool => {
+      const remove = vi.fn<() => void>();
+      const { figmaCtx, store } = makeFigma({ C: { id: 'C', type: 'COMPONENT', remove } });
+      const getNodeByIdAsync = vi.fn<(id: string) => Promise<unknown>>(async id => {
+        expect(typeof id).toBe('string');
+        return store.get(id) ?? null;
+      });
+      const ctx = { ...figmaCtx, getNodeByIdAsync } as unknown as typeof figma;
+      await expect(
+        createBatchHandler(ctx, {
+          [tool]: () => {
+            throw new Error('create refused');
+          },
+        })({ ops: [{ tool, params: { componentId: 'C' } }] }),
+      ).rejects.toThrow(/create refused; failed op recovery: not applicable .* NOT removed/);
+      expect(remove).not.toHaveBeenCalled();
+      expect([...store.keys()]).toEqual(['C']);
+    },
+  );
+
+  it('keeps the original error and rolls earlier ops back even when failed-op recovery throws', async () => {
+    let opacity = 1;
+    const originalError = new Error('original apply failure');
+    const target = {
+      id: 'B',
+      get opacity() {
+        return opacity;
+      },
+      set opacity(v) {
+        if (v === 1) throw new Error('restore refused');
+        opacity = v;
+      },
+    };
+    const { figmaCtx, store } = makeFigma({ A: { id: 'A', name: 'before' }, B: target });
+    const batch = createBatchHandler(figmaCtx, {
+      rename_node: createRenameNodeHandler(figmaCtx),
+      set_opacity: () => {
+        target.opacity = 0.2;
+        throw originalError;
+      },
+    });
+    const error = (await Promise.resolve(
+      batch({
+        ops: [
+          { tool: 'rename_node', params: { nodeId: 'A', name: 'after' } },
+          { tool: 'set_opacity', params: { nodeId: 'B', opacity: 0.2 } },
+        ],
+      }),
+    ).catch((err: unknown) => err)) as Error;
+    expect(error.cause).toBe(originalError);
+    expect(error.message).toMatch(
+      /rolled back 1 applied op\(s\): original apply failure; failed op recovery: FAILED \[restore refused\]/,
+    );
+    expect(store.get('A')!.name).toBe('before');
+  });
+
+  it('does not write back unchanged opacity or detach its binding after a validation failure', async () => {
+    const setOpacity = vi.fn<(v: unknown) => void>();
+    const setBoundVariable = vi.fn<(field: string, v: unknown) => void>();
+    const node = {
+      id: 'A',
+      get opacity() {
+        return 0.5;
+      },
+      set opacity(v) {
+        setOpacity(v);
+      },
+      boundVariables: { opacity: { type: 'VARIABLE_ALIAS', id: 'V' } },
+      setBoundVariable,
+    };
+    const { figmaCtx } = makeFigma({ A: node });
+    await expect(
+      createBatchHandler(figmaCtx, {
+        set_opacity: createSetOpacityHandler(figmaCtx),
+      })({ ops: [{ tool: 'set_opacity', params: { nodeId: 'A', opacity: 2 } }] }),
+    ).rejects.toThrow(/failed op recovery: restored captured state/);
+    expect(setOpacity).not.toHaveBeenCalled();
+    expect(setBoundVariable).not.toHaveBeenCalled();
+  });
+
+  it.each(['VIDEO', 'SHADER'])(
+    'restores %s fills through the async setter during rollback',
+    async type => {
+      const original = [{ type }];
+      let fills: unknown = original;
+      const asyncSetter = vi.fn<(v: unknown) => Promise<void>>(async v => {
+        fills = v;
+      });
+      const node = {
+        id: 'A',
+        get fills() {
+          return fills;
+        },
+        set fills(v) {
+          if ((v as { type: string }[]).some(p => p.type === type)) throw new Error('sync refused');
+          fills = v;
+        },
+        setFillsAsync: asyncSetter,
+      };
+      const { figmaCtx } = makeFigma({ A: node, B: { id: 'B', opacity: 1 } });
+      await expect(
+        createBatchHandler(figmaCtx, {
+          set_fills: createSetFillsHandler(figmaCtx),
+          set_opacity: createSetOpacityHandler(figmaCtx),
+        })({
+          ops: [
+            { tool: 'set_fills', params: { nodeId: 'A', fills: [SOLID(0)] } },
+            { tool: 'set_opacity', params: { nodeId: 'B', opacity: 2 } },
+          ],
+        }),
+      ).rejects.toThrow(/rolled back 1 applied op/);
+      expect(asyncSetter).toHaveBeenCalledExactlyOnceWith(original);
+      expect(fills).toEqual(original);
+    },
+  );
+});
 
 type Fn = (...args: never[]) => unknown;
 type Run = Record<string, unknown>;
@@ -790,6 +1008,35 @@ describe('batch handler', () => {
     expect(assigned.length).toBeGreaterThan(10); // the regexes still match something
     expect(ranged.length).toBeGreaterThan(10);
     expect([...assigned, ...ranged].filter(f => !TEXT_RESTORED_FIELDS.has(f))).toEqual([]);
+  });
+
+  it('captures and restores every set_text_properties write on empty text (derived from source)', async () => {
+    const source = readFileSync(
+      new URL('../../src/handlers/set-text-properties.ts', import.meta.url),
+      'utf8',
+    );
+    const fields = [...new Set([...source.matchAll(/\btext\.([A-Za-z]+) = /g)].map(m => m[1]!))];
+    expect(fields.length).toBeGreaterThan(20);
+    const original = Object.fromEntries(
+      fields.map(field => [
+        field,
+        field === 'fontName' ? { family: 'Inter', style: 'Regular' } : `original:${field}`,
+      ]),
+    );
+    const text = { id: 'T', type: 'TEXT', characters: '', width: 100, height: 20, ...original };
+    const { figmaCtx } = makeFigma({ T: text });
+    const snapshot = await captureText(figmaCtx, text as unknown as TextLike);
+    const captured = { ...snapshot.node, ...snapshot.empty };
+    expect(fields.filter(field => !(field in captured))).toEqual([]);
+    Object.assign(
+      text,
+      Object.fromEntries(fields.filter(f => f !== 'fontName').map(f => [f, 'changed'])),
+    );
+    await restoreText(figmaCtx, text as unknown as TextLike, snapshot);
+    for (const field of fields)
+      expect({ [field]: (text as Record<string, unknown>)[field] }).toEqual({
+        [field]: original[field],
+      });
   });
 
   it('refuses a non-batchable op with the reason, before anything runs', async () => {
@@ -2028,6 +2275,36 @@ const makeGrid = (init: {
 };
 
 describe('batch inverse for GRID placement modes', () => {
+  it('restores the original mode and padding when an unverified track setter rejects after switching to GRID', async () => {
+    const { node, figmaCtx } = makeTree();
+    const page = node('P', 'PAGE', null);
+    const frame = node('G', 'FRAME', page, { layoutMode: 'NONE', paddingLeft: 4 });
+    Object.defineProperty(frame, 'gridColumnSizes', {
+      get: () => [],
+      set: () => {
+        throw new Error('native size refusal');
+      },
+    });
+    await expect(
+      createBatchHandler(figmaCtx, {
+        set_auto_layout: createSetAutoLayoutHandler(figmaCtx),
+      })({
+        ops: [
+          {
+            tool: 'set_auto_layout',
+            params: {
+              nodeId: 'G',
+              layoutMode: 'GRID',
+              paddingLeft: 40,
+              gridColumnSizes: [{ type: 'FIXED', value: 50 }],
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/native size refusal.*failed op recovery: restored captured state/);
+    expect(frame.layoutMode).toBe('NONE');
+    expect(frame.paddingLeft).toBe(4);
+  });
   const layout = (params: Record<string, unknown>) => ({
     tool: 'set_auto_layout',
     params: { nodeId: 'G', layoutMode: 'GRID', ...params },

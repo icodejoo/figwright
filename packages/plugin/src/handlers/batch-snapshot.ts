@@ -21,7 +21,7 @@
  * only what differs from the snapshot, in an order that keeps every write valid.
  */
 
-import { writePaints } from './paints.js';
+import { needsAsyncPaintSetter, writePaints } from './paints.js';
 import type { TextLike } from './text-like.js';
 
 type Bag = Record<string, unknown>;
@@ -205,8 +205,8 @@ export const captureProps = async (
 export const restoreProps = async (node: BaseNode, snapshot: PropsSnapshot): Promise<void> => {
   unbindAdded(node, snapshot.bindings);
   for (const [prop, value] of Object.entries(snapshot.values)) {
-    // A paint list holding a PATTERN can only go back through the async setter (see writePaints).
-    if ((prop === 'fills' || prop === 'strokes') && hasPattern(value)) {
+    // Use the same async-paint policy as writes, including VIDEO / SHADER.
+    if ((prop === 'fills' || prop === 'strokes') && needsAsyncPaintSetter(value)) {
       // eslint-disable-next-line no-await-in-loop -- at most the two paint lists, in snapshot order
       if (!same(bagOf(node)[prop], value)) await writePaints(node, prop, value as Paint[]);
     } else {
@@ -269,6 +269,13 @@ const EMPTY_TEXT_PROPS = [
   'letterSpacing',
   'textCase',
   'textDecoration',
+  'textDecorationStyle',
+  'textDecorationOffset',
+  'textDecorationThickness',
+  'textDecorationColor',
+  'textDecorationSkipInk',
+  'listSpacing',
+  'textWrapStyle',
   'paragraphSpacing',
   'paragraphIndent',
   'fills',

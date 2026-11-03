@@ -453,7 +453,7 @@ export class RelayClient {
       return;
     }
     try {
-      const result = await handler(method, params);
+      const result = await handler(method, params, id);
       // A create call only names the node it made in its result, so fold those ids in too.
       this.settle(id, 'ok', {
         payload: summarizePayload(result),

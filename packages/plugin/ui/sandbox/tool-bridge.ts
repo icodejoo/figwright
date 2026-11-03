@@ -68,9 +68,13 @@ export const createToolBridge = (opts: ToolBridgeOptions = {}): ToolBridge => {
     }
   });
 
-  const handler: ToolHandler = (method, params) =>
+  const handler: ToolHandler = (method, params, requestId) =>
     new Promise<unknown>((resolve, reject) => {
-      const id = newId();
+      const id = requestId ?? newId();
+      if (pending.has(id)) {
+        reject(new Error(`duplicate in-flight bridge request id: ${id}`));
+        return;
+      }
       // Per-tool budget (innermost layer B) so a heavy tool isn't capped at the default window while
       // the relay still waits. An explicit opts.timeoutMs overrides for tests. See getToolBudget.
       const timeoutMs = opts.timeoutMs ?? getToolBudget(method);

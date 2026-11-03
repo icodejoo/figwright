@@ -4,11 +4,17 @@
  * The synchronous `fills` / `strokes` setters refuse a PATTERN paint outright — even one read back
  * off the same node and written back unchanged (measured) — so any read-modify-write of a node that
  * already holds a pattern threw before it could save anything else. Only the async setters take one
- * (they load the pattern's source node first). VIDEO / SHADER writes also use the async path under
- * dynamic-page. Other paints keep the synchronous assignment it always had: the async setters yield
- * to the editor before they write, and the callers that read the array they write back rely on
- * nothing awaiting in between.
+ * (they load the pattern's source node first). VIDEO / SHADER keep the existing async policy;
+ * typings do not document a requirement for those paints. Other paints keep the synchronous
+ * assignment: async setters yield to the editor before they write, and the callers that read the
+ * array they write back rely on nothing awaiting in between.
  */
+// Typings require async only for PATTERN. Evidence for VIDEO / SHADER is insufficient; keep
+// restores aligned with writePaints' existing policy rather than claiming an API requirement.
+export const needsAsyncPaintSetter = (paints: unknown): boolean =>
+  Array.isArray(paints) &&
+  paints.some(p => ['PATTERN', 'VIDEO', 'SHADER'].includes((p as Paint | null)?.type ?? ''));
+
 export const writePaints = async (
   node: BaseNode,
   field: 'fills' | 'strokes',
@@ -17,10 +23,7 @@ export const writePaints = async (
   const target = node as unknown as Partial<MinimalFillsMixin & MinimalStrokesMixin> &
     Record<string, unknown>;
   const setter = field === 'fills' ? target.setFillsAsync : target.setStrokesAsync;
-  if (
-    paints.some(p => p.type === 'PATTERN' || p.type === 'VIDEO' || p.type === 'SHADER') &&
-    typeof setter === 'function'
-  ) {
+  if (needsAsyncPaintSetter(paints) && typeof setter === 'function') {
     await setter.call(node, paints);
     return;
   }

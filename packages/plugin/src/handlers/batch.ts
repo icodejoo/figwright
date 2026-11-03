@@ -89,6 +89,8 @@ interface BatchInverse {
     captured: unknown,
     result: unknown,
   ): Promise<unknown>;
+  /** This inverse needs a successful result; no created id is available on failure. */
+  resultOnlyUndo?: boolean;
   /** Nodes the op writes: any instance containing one has its override list guarded. */
   touches?(params: unknown, captured: unknown): readonly string[];
   /** Nodes whose box the op can change: the layout region around each is guarded against drift. */
@@ -660,6 +662,7 @@ const vectorInverse: BatchInverse = {
 
 /** Outline_stroke adds a vector beside its source and leaves the source alone: undo removes it. */
 const outlineInverse: BatchInverse = {
+  resultOnlyUndo: true,
   async capture(figmaCtx, params) {
     const tool = 'outline_stroke';
     const id = stringParam(params, 'nodeId', tool);
@@ -1333,6 +1336,7 @@ const swapInverse: BatchInverse = {
 
 /** Create op: validate parentId (if any) up front; undo removes the node the op created. */
 const createInverse = (tool: string, hasParent = true): BatchInverse => ({
+  resultOnlyUndo: true,
   async capture(figmaCtx, params) {
     if (!hasParent) return null;
     const parentId = paramsOf(params).parentId;
@@ -1383,6 +1387,7 @@ const createdInverse = (
   key: string,
   remove: (figmaCtx: typeof figma, id: string, params: unknown) => Promise<void>,
 ): BatchInverse => ({
+  resultOnlyUndo: true,
   capture: async () => null,
   async undo(figmaCtx, params, _captured, result) {
     const id = (result as Bag | null)?.[key];
@@ -1769,6 +1774,7 @@ const updateFlowsInverse: BatchInverse = {
 
 interface EditPropertyState {
   ownerId: string;
+  propertyId: string;
   previous: {
     name?: string;
     defaultValue?: PropertyValue;
@@ -1813,15 +1819,40 @@ const editPropertyInverse: BatchInverse = {
       previous.defaultValue = def.boundVariables?.defaultValue ?? def.defaultValue;
     if (p.preferredValues !== undefined)
       previous.preferredValues = [...(def.preferredValues ?? [])];
-    const state: EditPropertyState = { ownerId: owner.id, previous };
+    const state: EditPropertyState = { ownerId: owner.id, propertyId, previous };
     return state;
   },
   async undo(figmaCtx, _params, captured, result) {
     const s = captured as EditPropertyState;
-    const propertyId = (result as { propertyId?: unknown } | null)?.propertyId;
+    const propertyId = (result as { propertyId?: unknown } | null)?.propertyId ?? s.propertyId;
     const owner = await live(figmaCtx, s.ownerId);
     if (owner === null || typeof propertyId !== 'string') return undefined;
-    (owner as ComponentNode | ComponentSetNode).editComponentProperty(propertyId, s.previous);
+    const component = owner as ComponentNode | ComponentSetNode;
+    if (result === undefined) {
+      const current = component.componentPropertyDefinitions[propertyId];
+      if (current === undefined) {
+        throw new Error(
+          'cannot restore component property: failed op returned no renamed property id',
+        );
+      }
+      // A rejected native edit often changed nothing. Avoid issuing another edit in that case.
+      const changed = Object.fromEntries(
+        Object.entries(s.previous).filter(
+          ([key, value]) =>
+            !same(
+              key === 'name'
+                ? propertyDisplayName(propertyId)
+                : key === 'defaultValue'
+                  ? (current.boundVariables?.defaultValue ?? current.defaultValue)
+                  : (current as unknown as Bag)[key],
+              value,
+            ),
+        ),
+      );
+      if (Object.keys(changed).length > 0) component.editComponentProperty(propertyId, changed);
+    } else {
+      component.editComponentProperty(propertyId, s.previous);
+    }
     return undefined;
   },
 };
@@ -1840,6 +1871,7 @@ const removeProperty = async (
 };
 
 const addPropertyInverse: BatchInverse = {
+  resultOnlyUndo: true,
   capture: async () => null,
   async undo(figmaCtx, _params, _captured, result) {
     const propertyId = (result as { propertyId?: unknown } | null)?.propertyId;
@@ -1949,6 +1981,7 @@ const navigateInverse: BatchInverse = {
 // Figma editor.
 
 const applyAnimationStyleInverse: BatchInverse = {
+  resultOnlyUndo: true,
   async capture(figmaCtx, params) {
     assertFigmaEditor(figmaCtx, 'batch/apply_animation_style');
     const id = stringParam(params, 'nodeId', 'apply_animation_style');
@@ -2136,6 +2169,7 @@ const componentDocumentationInverse: BatchInverse = {
 };
 
 const createSlotInverse: BatchInverse = {
+  resultOnlyUndo: true,
   async capture(figmaCtx, params) {
     const node = await nodeOf(
       figmaCtx,
@@ -2146,6 +2180,7 @@ const createSlotInverse: BatchInverse = {
     return null;
   },
   async undo(figmaCtx, _params, _captured, result) {
+    if (result === undefined) return undefined;
     const s = result as { nodeId: string; propertyId?: string };
     const node = await live(figmaCtx, s.nodeId);
     node?.remove();
@@ -2567,7 +2602,11 @@ const undoOp = async (
   result: unknown,
   liveNodes: Map<string, BaseNode>,
 ): Promise<string | undefined> => {
-  const own = await INVERSES[op.tool]!.undo(figmaCtx, op.params, captured.state, result);
+  const inverse = INVERSES[op.tool]!;
+  const own =
+    result === undefined && inverse.resultOnlyUndo
+      ? undefined
+      : await inverse.undo(figmaCtx, op.params, captured.state, result);
   const overrides =
     captured.guard.length > 0 ? await restoreOverrideGuard(figmaCtx, captured.guard) : undefined;
   await restoreLayoutDrift(figmaCtx, captured.layout, liveNodes);
@@ -2617,6 +2656,17 @@ export const createBatchHandler =
         const undoFailures: string[] = [];
         const residue: string[] = [];
         const liveNodes = new Map<string, BaseNode>();
+        let failedRecovery: string;
+        try {
+          const note = await undoOp(figmaCtx, op, captured[i]!, undefined, liveNodes);
+          if (note !== undefined) residue.push(`failed op ${i} (${op.tool}): ${note}`);
+          failedRecovery = INVERSES[op.tool]!.resultOnlyUndo
+            ? 'failed op recovery: not applicable (a create op has no result to undo; it may have created a node before failing, which is NOT removed, so check the target for leftovers; captured guards restored)'
+            : 'failed op recovery: restored captured state';
+        } catch (recoveryErr) {
+          const m = recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr);
+          failedRecovery = `failed op recovery: FAILED [${m}] — document may be partially changed`;
+        }
         for (let j = i - 1; j >= 0; j -= 1) {
           try {
             const note = await undoOp(figmaCtx, ops[j]!, captured[j]!, results[j], liveNodes);
@@ -2634,9 +2684,12 @@ export const createBatchHandler =
             : `rolled back ${i - undoFailures.length}/${i} op(s); ${undoFailures.length} undo(s) FAILED [${undoFailures.join('; ')}] — document may be partially changed`;
         const leftover =
           residue.length === 0 ? '' : ` (restored with residue: ${residue.join('; ')})`;
-        throw new Error(`batch: op ${i} (${op.tool}) failed, ${rollback}${leftover}: ${message}`, {
-          cause: err,
-        });
+        throw new Error(
+          `batch: op ${i} (${op.tool}) failed, ${rollback}${leftover}: ${message}; ${failedRecovery}`,
+          {
+            cause: err,
+          },
+        );
       }
     }
     /* eslint-enable no-await-in-loop */

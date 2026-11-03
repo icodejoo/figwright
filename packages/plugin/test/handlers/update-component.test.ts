@@ -46,6 +46,13 @@ describe('update_component', () => {
             if (restoreFails && v === 'old') throw new Error('restore boom');
             state.description = v;
           },
+          get descriptionMarkdown() {
+            return state.description;
+          },
+          set descriptionMarkdown(v: string) {
+            if (restoreFails && v === 'old') throw new Error('restore boom');
+            state.description = v;
+          },
           get documentationLinks() {
             return state.links;
           },
@@ -72,6 +79,40 @@ describe('update_component', () => {
     await expect(run(bad.node)).rejects.toThrow(
       /links refused.*could not be restored \(restore boom\)/,
     );
+  });
+  it('restores original Markdown after a plain description write and a refused link', async () => {
+    let markdown = '**bold**';
+    const node = {
+      id: 'c',
+      type: 'COMPONENT',
+      remote: false,
+      get description() {
+        return markdown.replaceAll('**', '');
+      },
+      set description(v: string) {
+        markdown = v;
+      },
+      get descriptionMarkdown() {
+        return markdown;
+      },
+      set descriptionMarkdown(v: string) {
+        markdown = v;
+      },
+      set documentationLinks(_links: unknown) {
+        throw new Error('links refused');
+      },
+    };
+    await expect(
+      createUpdateComponentHandler({
+        getNodeByIdAsync: async () => node,
+      } as unknown as typeof figma)({
+        componentId: 'c',
+        description: 'new plain text',
+        documentationLinks: [{ uri: 'https://example.com' }],
+      }),
+    ).rejects.toThrow('links refused');
+    expect(node.descriptionMarkdown).toBe('**bold**');
+    expect(node.description).toBe('bold');
   });
   it('refuses an unparseable link uri before writing anything', async () => {
     const node = { id: 'c', type: 'COMPONENT', remote: false, description: 'keep' };

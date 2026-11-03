@@ -28,6 +28,30 @@ const makeFrame = () => ({
 });
 
 describe('set_auto_layout handler', () => {
+  it.each([
+    ['gridRowSizes', 'layoutSizingVertical'],
+    ['gridColumnSizes', 'layoutSizingHorizontal'],
+  ])('rejects FLEX %s on a HUG axis before padding or tracks are written', async (key, axis) => {
+    const node = {
+      ...makeFrame(),
+      layoutMode: 'GRID',
+      gridRowCount: 1,
+      gridColumnCount: 1,
+      [axis!]: 'HUG',
+      gridRowSizes: [{ type: 'FIXED', value: 20 }],
+      gridColumnSizes: [{ type: 'FIXED', value: 30 }],
+    };
+    const before = structuredClone(node);
+    await expect(
+      createSetAutoLayoutHandler(fakeFigma({ '1:1': node }))({
+        nodeId: '1:1',
+        layoutMode: 'GRID',
+        paddingLeft: 99,
+        [key!]: [{ type: 'FLEX' }],
+      }),
+    ).rejects.toThrow(/cannot contain FLEX.*HUG.*nothing was changed/);
+    expect(node).toEqual(before);
+  });
   it('enables auto layout and applies padding / spacing / alignment', async () => {
     const node = makeFrame();
     const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));

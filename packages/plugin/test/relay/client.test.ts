@@ -535,7 +535,7 @@ describe('RelayClient', () => {
     );
 
     await new Promise(resolve => setTimeout(resolve, 5));
-    expect(handler).toHaveBeenCalledWith('ping', { hello: 'world' });
+    expect(handler).toHaveBeenCalledWith('ping', { hello: 'world' }, 'tool-1');
     expect(liveSock!.sent.length).toBe(sentBefore + 1);
     const reply = decodeEnvelope(liveSock!.sent.at(-1)!);
     expect(reply).toMatchObject({
