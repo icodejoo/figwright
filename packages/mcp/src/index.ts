@@ -50,7 +50,12 @@ import { handleListFiles, LIST_FILES_TOOL_NAME } from './tools/list-files.js';
 import { captureNotices, withRoutingNotice, withSkewNotice } from './tools/notices.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
 import { ALL_TOOL_SPECS } from './tools/registry.js';
-import { assertWithinLimit, fitNodeList } from './tools/result-budget.js';
+import {
+  assertWithinLimit,
+  fitLibraryResult,
+  fitNodeList,
+  fitVariableBindings,
+} from './tools/result-budget.js';
 import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
@@ -150,6 +155,12 @@ const nodeListHandler =
 // server-local tools read the filesystem (some reusing dispatch), and get_screenshot returns an
 // image content block. Everything else takes the generic dispatch path below.
 const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
+  scan_variable_bindings: async args =>
+    textResult(
+      fitVariableBindings(
+        (await dispatch('scan_variable_bindings', args)) as { bindings: { count: number }[] },
+      ),
+    ),
   [pingTool.name]: async () => ({
     content: [
       {
@@ -255,7 +266,14 @@ const createMcpServer = (): McpServer => {
         // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
         const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
         if (!IMAGE_PATH_TOOLS.has(spec.name)) {
-          return textResult(await dispatch(spec.name, dispatchArgs));
+          const result = await dispatch(spec.name, dispatchArgs);
+          return textResult(
+            ['get_publish_status', 'list_team_library', 'bind_variables_by_value'].includes(
+              spec.name,
+            )
+              ? fitLibraryResult(result as Record<string, unknown>)
+              : result,
+          );
         }
         // A `path` import is the one case where this side knows something the sandbox's error does
         // not say: which file the bytes came from. Figma's own ceilings (4096px) surface as a

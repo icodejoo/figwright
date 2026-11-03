@@ -33,6 +33,10 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   'get_document',
   // Explicit sequential page preloading may outlive the ordinary read budget.
   'load_page',
+  'scan_variable_bindings',
+  'get_publish_status',
+  'bind_variables_by_value',
+  'rebind_variables',
   'get_design_context',
   // Full recursive subtree serialization with no depth limit or dedupe (per mixed TEXT a
   // getStyledTextSegments call, per INSTANCE an async main-component resolve) — on a large frame

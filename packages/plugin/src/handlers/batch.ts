@@ -2423,6 +2423,10 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
  * either side without someone deciding which, and saying why when it is this one.
  */
 export const NON_BATCHABLE: Readonly<Record<string, string>> = {
+  bind_variables_by_value:
+    'subtree value binding has no per-operation inverse or atomic rollback; call separately with dryRun first',
+  rebind_variables:
+    'large in-place rebinding cannot be rolled back per operation; call separately and reverse the mapping to undo (only lossless for unambiguous mappings)',
   save_version: 'version history cannot be deleted by the plugin API',
   set_aspect_ratio_lock:
     'targetAspectRatio is read-only; a previous arbitrary ratio cannot be faithfully restored',

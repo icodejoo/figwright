@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/mcp/src/tools/registry.js';
@@ -147,5 +149,19 @@ describe('batchable ops', () => {
     // The reason is the rejection message the caller reads, not a code comment.
     const thin = Object.entries(NON_BATCHABLE).filter(([, why]) => why.trim().length < 30);
     expect(thin).toEqual([]);
+  });
+});
+
+describe('write idempotency registration', () => {
+  it('routes every write through rawWrites (batch wraps its own dispatcher)', () => {
+    const source = readFileSync(
+      new URL('../packages/plugin/src/handlers/registry.ts', import.meta.url),
+      'utf8',
+    );
+    const raw = source.slice(source.indexOf('const rawWrites:'), source.indexOf('const handlers:'));
+    for (const name of WRITE_TOOL_NAMES) {
+      if (name === 'batch') continue;
+      expect(raw).toContain(`${name}:`);
+    }
   });
 });

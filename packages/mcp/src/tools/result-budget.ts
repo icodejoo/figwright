@@ -20,6 +20,30 @@ const megabytes = (bytes: number): string => (bytes / 1024 / 1024).toFixed(1);
 /** Bytes `text` occupies as a JSON string inside the JSON-RPC line: escaped, then UTF-8. */
 const wireBytes = (text: string): number => Buffer.byteLength(JSON.stringify(text), 'utf8') - 2;
 
+/** Keep the most frequent variables; counts in retained rows remain exact for the scanned scope. */
+export const fitVariableBindings = <T extends { bindings: { count: number }[] }>(
+  result: T,
+  budgetBytes = NODE_LIST_BUDGET_BYTES,
+): T & { truncated?: boolean } => {
+  if (wireBytes(JSON.stringify(result)) <= budgetBytes) return result;
+  const bindings = result.bindings.toSorted((a, b) => b.count - a.count);
+  const shell = {
+    ...result,
+    bindings: [] as typeof bindings,
+    truncated: true,
+    bindingCount: bindings.length,
+    note: 'Bindings trimmed by count; narrow root, variableIds or collectionIds to retrieve omitted variables.',
+  };
+  let used = wireBytes(JSON.stringify(shell));
+  for (const row of bindings) {
+    const size = wireBytes(JSON.stringify(row)) + (shell.bindings.length ? 1 : 0);
+    if (used + size > budgetBytes) break;
+    shell.bindings.push(row);
+    used += size;
+  }
+  return shell;
+};
+
 /**
  * Trim a node-list result to what one tool result can carry. A list that fits is returned as is.
  * Otherwise the leading nodes that fit are kept, `matchCount` says how many matched in all, and a
@@ -90,4 +114,31 @@ export const assertWithinLimit = (
       'drop the connection to this server. Ask for less in one call: scope it to a smaller subtree ' +
       'or split it into several calls.',
   );
+};
+
+/** Bound new library/publication/value-binding lists while retaining aggregate execution counts. */
+export const fitLibraryResult = (
+  result: Record<string, unknown>,
+  budgetBytes = NODE_LIST_BUDGET_BYTES,
+): Record<string, unknown> => {
+  if (wireBytes(JSON.stringify(result)) <= budgetBytes) return result;
+  const output = {
+    ...result,
+    truncated: true,
+    note: 'Rows trimmed to fit the result budget; narrow root, ids, libraryName or variableIds.',
+  };
+  for (const field of ['items', 'collections', 'variables', 'perVariable']) {
+    const rows = result[field];
+    if (!Array.isArray(rows)) continue;
+    let low = 0,
+      high = rows.length;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (wireBytes(JSON.stringify({ ...output, [field]: rows.slice(0, mid) })) <= budgetBytes)
+        low = mid;
+      else high = mid - 1;
+    }
+    Object.assign(output, { [field]: rows.slice(0, low) });
+  }
+  return output;
 };

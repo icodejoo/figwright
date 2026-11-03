@@ -88,6 +88,8 @@ describe('normalizeIdArgs', () => {
       styleId: 'S:abc123,',
       afterStyleId: 'S:ref456,',
       variableId: 'VariableID:1:23',
+      variableIds: ['VariableID:1:23', '1-23'],
+      collectionIds: ['VariableCollectionId:1:9', '1-9'],
       componentKey: 'a1b2c3d4',
       propertyId: 'Show Icon#12:5',
     };
@@ -115,7 +117,10 @@ describe('normalizeIdArgs', () => {
       'styleId', // shared-style ids (S:…)
       'afterStyleId', // style-order reference, same non-canvas namespace as styleId
       'variableId', // variable ids (VariableID:…)
+      'ids', // publication ids span node, variable and style namespaces
+      'variableIds', // variable filter ids, never canvas URLs
       'collectionId', // variable-collection ids
+      'collectionIds', // collection filter ids, never canvas URLs
       'propertyId', // component-property handles (name#id)
       'modeId', // variable-mode ids
       'animationStyleId', // Motion applied-style instance ids

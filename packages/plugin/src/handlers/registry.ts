@@ -14,6 +14,7 @@ import { createBatchHandler } from './batch.js';
 import { createBindComponentPropertyHandler } from './bind-component-property.js';
 import { createBindVariableToNodeHandler } from './bind-variable-to-node.js';
 import { createBindVariableToPaintHandler } from './bind-variable-to-paint.js';
+import { createBindVariablesByValueHandler } from './bind-variables-by-value.js';
 import { createBooleanNodesHandler } from './boolean-nodes.js';
 import { createCloneNodeHandler } from './clone-node.js';
 import { createCombineAsVariantsHandler } from './combine-as-variants.js';
@@ -64,6 +65,7 @@ import { createGetNodeHandler } from './get-node.js';
 import { createGetNodesInfoHandler } from './get-nodes-info.js';
 import { createGetPagesHandler } from './get-pages.js';
 import { createGetPluginDataHandler } from './get-plugin-data.js';
+import { createGetPublishStatusHandler } from './get-publish-status.js';
 import { createGetReactionsHandler } from './get-reactions.js';
 import { createGetScreenshotHandler } from './get-screenshot.js';
 import { createGetSelectionHandler } from './get-selection.js';
@@ -77,11 +79,13 @@ import { createImportStyleHandler } from './import-style.js';
 import { createImportSvgHandler } from './import-svg.js';
 import { createImportVariableHandler } from './import-variable.js';
 import { createListFilesHandler } from './list-files.js';
+import { createListTeamLibraryHandler } from './list-team-library.js';
 import { createLoadPageHandler } from './load-page.js';
 import { createSetLockedHandler } from './lock-nodes.js';
 import { createMoveNodesHandler } from './move-nodes.js';
 import { createNavigateToPageHandler } from './navigate-to-page.js';
 import { createPingHandler } from './ping.js';
+import { createRebindVariablesHandler } from './rebind-variables.js';
 import { createRemoveAnimationStyleHandler } from './remove-animation-style.js';
 import { createRemoveManualKeyframeTrackHandler } from './remove-manual-keyframe-track.js';
 import { createRemoveReactionsHandler } from './remove-reactions.js';
@@ -102,6 +106,7 @@ import { createSaveImageFillsHandler } from './save-image-fills.js';
 import { createSaveVersionHandler } from './save-version.js';
 import { createScanNodesByTypesHandler } from './scan-nodes-by-types.js';
 import { createScanTextNodesHandler } from './scan-text-nodes.js';
+import { createScanVariableBindingsHandler } from './scan-variable-bindings.js';
 import { createSearchNodesHandler } from './search-nodes.js';
 import { createSetArcHandler } from './set-arc.js';
 import { createSetAspectRatioLockHandler } from './set-aspect-ratio-lock.js';
@@ -235,6 +240,8 @@ export const createSandboxHandlers = (
     set_variable_value: createSetVariableValueHandler(figmaCtx),
     bind_variable_to_node: createBindVariableToNodeHandler(figmaCtx),
     bind_variable_to_paint: createBindVariableToPaintHandler(figmaCtx),
+    bind_variables_by_value: createBindVariablesByValueHandler(figmaCtx),
+    rebind_variables: createRebindVariablesHandler(figmaCtx),
     import_variable: createImportVariableHandler(figmaCtx),
     set_node_variable_mode: createSetNodeVariableModeHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
@@ -291,6 +298,9 @@ export const createSandboxHandlers = (
   const handlers: SandboxHandlers = {
     get_perf_stats: params => perfStats((params ?? {}) as Parameters<typeof perfStats>[0]),
     load_page: createLoadPageHandler(figmaCtx),
+    get_publish_status: createGetPublishStatusHandler(figmaCtx),
+    list_team_library: createListTeamLibraryHandler(figmaCtx),
+    scan_variable_bindings: createScanVariableBindingsHandler(figmaCtx),
     get_component_instances: createGetComponentInstancesHandler(figmaCtx),
     get_style_consumers: createGetStyleConsumersHandler(figmaCtx),
     ping: createPingHandler(figmaCtx),

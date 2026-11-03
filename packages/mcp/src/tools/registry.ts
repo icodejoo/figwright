@@ -2,7 +2,6 @@
 // registers every spec with McpServer (which generates the advertised JSON Schema from each Zod
 // inputSchema); the write set is derived from `kind`, not maintained by hand. A registry test asserts
 // these stay in sync with the plugin's handler map so a new tool can't be half-wired.
-
 import { z } from 'zod';
 
 import { addComponentPropertyTool } from './add-component-property.js';
@@ -18,6 +17,7 @@ import { batchTool } from './batch.js';
 import { bindComponentPropertyTool } from './bind-component-property.js';
 import { bindVariableToNodeTool } from './bind-variable-to-node.js';
 import { bindVariableToPaintTool } from './bind-variable-to-paint.js';
+import { bindVariablesByValueTool } from './bind-variables-by-value.js';
 import { booleanNodesTool } from './boolean-nodes.js';
 import { cloneNodeTool } from './clone-node.js';
 import { combineAsVariantsTool } from './combine-as-variants.js';
@@ -71,6 +71,7 @@ import { getNodeTool } from './get-node.js';
 import { getNodesInfoTool } from './get-nodes-info.js';
 import { getPagesTool } from './get-pages.js';
 import { getPluginDataTool } from './get-plugin-data.js';
+import { getPublishStatusTool } from './get-publish-status.js';
 import { getReactionsTool } from './get-reactions.js';
 import { getScreenshotTool } from './get-screenshot.js';
 import { getSelectionTool } from './get-selection.js';
@@ -86,12 +87,14 @@ import { importStyleTool } from './import-style.js';
 import { importSvgTool } from './import-svg.js';
 import { importVariableTool } from './import-variable.js';
 import { listFilesTool } from './list-files.js';
+import { listTeamLibraryTool } from './list-team-library.js';
 import { lockNodesTool } from './lock-nodes.js';
 import { moveNodesTool } from './move-nodes.js';
 import { navigateToPageTool } from './navigate-to-page.js';
 import { outlineStrokeTool } from './outline-stroke.js';
 import { getPerfStatsTool, loadPageTool } from './perf.js';
 import { pingTool } from './ping.js';
+import { rebindVariablesTool } from './rebind-variables.js';
 import { removeAnimationStyleTool } from './remove-animation-style.js';
 import { removeManualKeyframeTrackTool } from './remove-manual-keyframe-track.js';
 import { removeReactionsTool } from './remove-reactions.js';
@@ -114,6 +117,7 @@ import { saveVersionTool } from './save-version.js';
 import { scanComponentsTool } from './scan-components.js';
 import { scanNodesByTypesTool } from './scan-nodes-by-types.js';
 import { scanTextNodesTool } from './scan-text-nodes.js';
+import { scanVariableBindingsTool } from './scan-variable-bindings.js';
 import { searchNodesTool } from './search-nodes.js';
 import { setArcTool } from './set-arc.js';
 import { setAspectRatioLockTool } from './set-aspect-ratio-lock.js';
@@ -184,6 +188,10 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   searchNodesTool,
   getPerfStatsTool,
   loadPageTool,
+  scanVariableBindingsTool,
+  getPublishStatusTool,
+  listTeamLibraryTool,
+  bindVariablesByValueTool,
   scanTextNodesTool,
   scanNodesByTypesTool,
   getStylesTool,
@@ -282,6 +290,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   setVariableValueTool,
   bindVariableToNodeTool,
   bindVariableToPaintTool,
+  rebindVariablesTool,
   importVariableTool,
   setNodeVariableModeTool,
   renameVariableTool,

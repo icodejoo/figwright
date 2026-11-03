@@ -24,7 +24,7 @@ export const batchTool: ToolSpec = {
     "the document's state at the start of the batch, so an op that needs a node to already be in a " +
     'GRID frame (set_grid_child) is refused when an earlier op of the same batch would make it so: ' +
     'build the grid in a separate call first. Returns { ok, results } with one result per op in order; on ' +
-    'failure the error says what was rolled back.',
+    'failure the error says what was rolled back. bind_variables_by_value is refused because subtree writes have no per-operation inverse. rebind_variables is refused: it modifies a large scope in place; call separately and reverse its mapping to undo where unambiguous.',
   inputSchema: z.object({
     ops: z
       .array(
