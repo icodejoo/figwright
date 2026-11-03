@@ -46,7 +46,9 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
 // v13 (unreleased): paint blendMode, non-default image/video filters, TILE/FILL/FIT rotation,
 // TILE-only scale, and the API-required MULTITONE noise color.
 // Older baselines lack these visual dimensions and must be recaptured.
-export const SNAPSHOT_FORMAT_VERSION = 13;
+// v14 (unreleased): VIDEO's existing videoHash and CROP videoTransform (previously lost by reading
+// IMAGE's imageTransform). Older baselines must be recaptured rather than report a design edit.
+export const SNAPSHOT_FORMAT_VERSION = 14;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

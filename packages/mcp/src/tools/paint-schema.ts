@@ -1,3 +1,4 @@
+import { SerializedShaderPropertySchema } from '@figwright/shared';
 import { z } from 'zod';
 
 import { boundVariablesSchema } from './binding-schema.js';
@@ -86,7 +87,34 @@ export const fillPaintItemSchema = paintItemSchema
       'GRADIENT_ANGULAR',
       'GRADIENT_DIAMOND',
       'PATTERN',
+      'VIDEO',
+      'SHADER',
     ]),
+    videoHash: z
+      .string()
+      .describe(
+        'VIDEO: existing video hash from get_node / get_design_context in this file; no upload is performed',
+      )
+      .optional(),
+    scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
+    videoTransform: z.array(z.array(z.number())).describe('VIDEO CROP: 2×3 transform').optional(),
+    rotation: z.number().optional(),
+    filters: z
+      .object({
+        exposure: z.number().optional(),
+        contrast: z.number().optional(),
+        saturation: z.number().optional(),
+        temperature: z.number().optional(),
+        tint: z.number().optional(),
+        highlights: z.number().optional(),
+        shadows: z.number().optional(),
+      })
+      .optional(),
+    shaderId: z.string().describe('SHADER: id already imported into this file').optional(),
+    shaderProperties: z
+      .array(SerializedShaderPropertySchema)
+      .describe('SHADER: property-definition ids and values; metadata ignored')
+      .optional(),
     sourceNodeId: z
       .string()
       .describe('PATTERN: the node whose artwork is tiled (any layer in the file)')

@@ -42,6 +42,7 @@ import { createDeleteVariableModeHandler } from './delete-variable-mode.js';
 import { createDeleteVariableHandler } from './delete-variable.js';
 import { createDetachInstanceHandler } from './detach-instance.js';
 import { createEditComponentPropertyHandler } from './edit-component-property.js';
+import { createExportNodeDataHandler } from './export-node-data.js';
 import { createExportPdfHandler } from './export-pdf.js';
 import { createExportVideoHandler } from './export-video.js';
 import { createFindReplaceTextHandler } from './find-replace-text.js';
@@ -320,6 +321,7 @@ export const createSandboxHandlers = (
     get_design_context: createGetDesignContextHandler(figmaCtx),
     get_screenshot: createGetScreenshotHandler(figmaCtx),
     save_image_fills: createSaveImageFillsHandler(figmaCtx),
+    export_node_data: createExportNodeDataHandler(figmaCtx),
     export_pdf: createExportPdfHandler(figmaCtx),
     export_video: createExportVideoHandler(figmaCtx),
   };

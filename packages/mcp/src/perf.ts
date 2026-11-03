@@ -1,9 +1,13 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 interface ServerCall {
   tool: string;
+  requestId: string | null;
   startedAt: number;
   totalMs: number;
   success: boolean;
 }
+const context = new AsyncLocalStorage<{ dispatched: boolean }>();
 let enabled = false;
 const calls: Array<ServerCall | undefined> = Array.from({ length: 200 });
 let cursor = 0;
@@ -11,23 +15,31 @@ let size = 0;
 export const configureServerPerf = (value?: boolean): void => {
   if (value !== undefined) enabled = value;
 };
-export const observeTool = async <T>(tool: string, run: () => Promise<T>): Promise<T> => {
+export const observeTool = async <T>(
+  tool: string,
+  run: () => Promise<T>,
+  requestId: string | null = null,
+): Promise<T> => {
   if (!enabled || tool === 'get_perf_stats') return run();
+  const parent = context.getStore();
+  if (requestId !== null && parent) parent.dispatched = true;
+  const box = { dispatched: false };
   const startedAt = Date.now();
   let success = false;
   try {
-    const result = await run();
+    const result = await context.run(box, run);
     success = !(
       typeof result === 'object' &&
       result !== null &&
-      'isError' in result &&
-      result.isError
+      (('isError' in result && result.isError) || ('kind' in result && result.kind === 'err'))
     );
     return result;
   } finally {
-    calls[cursor] = { tool, startedAt, totalMs: Date.now() - startedAt, success };
-    cursor = (cursor + 1) % 200;
-    size = Math.min(size + 1, 200);
+    if (!box.dispatched) {
+      calls[cursor] = { tool, requestId, startedAt, totalMs: Date.now() - startedAt, success };
+      cursor = (cursor + 1) % 200;
+      size = Math.min(size + 1, 200);
+    }
   }
 };
 export const serverPerfStats = (params: { limit?: number; tool?: string; reset?: boolean }) => {

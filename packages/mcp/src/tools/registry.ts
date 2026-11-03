@@ -49,6 +49,7 @@ import { deleteVariableTool } from './delete-variable.js';
 import { designDiffTool } from './design-diff.js';
 import { detachInstanceTool } from './detach-instance.js';
 import { editComponentPropertyTool } from './edit-component-property.js';
+import { exportNodeDataTool } from './export-node-data.js';
 import { exportPdfTool } from './export-pdf.js';
 import { exportVideoTool } from './export-video.js';
 import { findReplaceTextTool } from './find-replace-text.js';
@@ -204,6 +205,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   getScreenshotTool,
   saveScreenshotsTool,
   saveImageFillsTool,
+  exportNodeDataTool,
   exportPdfTool,
   exportVideoTool,
   // Server-local (filesystem; no plugin handler — like save_screenshots). analyze_project is an

@@ -730,9 +730,20 @@ export const captureLayoutScope = async (
 export const restoreLayoutDrift = async (
   figmaCtx: typeof figma,
   scope: LayoutScope,
+  liveNodes?: Map<string, BaseNode>,
 ): Promise<void> => {
   if (scope.length === 0) return;
-  const nodes = await Promise.all(scope.map(async s => figmaCtx.getNodeByIdAsync(s.id)));
+  const nodes = await Promise.all(
+    scope.map(async s => {
+      const cached = liveNodes?.get(s.id);
+      if (cached && !cached.removed) return cached;
+      const node = await figmaCtx.getNodeByIdAsync(s.id);
+      // Never cache absence, rejection, or removed handles: later undo steps may change availability.
+      if (node && !node.removed) liveNodes?.set(s.id, node);
+      else liveNodes?.delete(s.id);
+      return node;
+    }),
+  );
   for (let pass = 0; pass < 2; pass += 1) {
     scope.forEach((snap, i) => {
       const node = nodes[i] as SceneNode | null;

@@ -228,3 +228,5 @@ animation is a fidelity miss, the same class as dropping a shadow.
 Paint blendMode is the paint’s own compositing mode. Image/video filters retain non-default adjustments; rotation is reported for TILE/FILL/FIT and scalingFactor only for TILE; filtersApplied still means original bytes need the composited export to preserve grading.
 
 For slow reads, enable recording with `get_perf_stats({ enabled: true })`, reproduce, then inspect `get_perf_stats` and preload pages with `load_page`.
+
+For locating layers only, use `get_selection({ brief: true })`, `scan_nodes_by_types({ types: [...], brief: true, limit: 100 })`, or `scan_text_nodes({ brief: true, limit: 100 })` (includes characters). Then read styled details with `get_node` / `get_design_context`. The default full reads remain appropriate when those details are needed. `truncated: true` means traversal stopped at the limit, without confirming more matches.

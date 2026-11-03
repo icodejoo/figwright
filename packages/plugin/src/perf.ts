@@ -4,7 +4,7 @@ export interface PerfCall {
   tool: string;
   arrivedAt: number;
   startedAt: number;
-  queueMs: number;
+  dispatchOverheadMs: number;
   handlerMs: number;
   byId: { count: number; totalMs: number; maxMs: number };
   pageLoadMs: number;
@@ -12,6 +12,10 @@ export interface PerfCall {
   yieldMs: number;
   traversalMs: number;
   serializationMs: number;
+  /** Synchronous readExposure time; a subset of serializationMs. Do not add them. */
+  exposureMs: number;
+  /** Number of readExposure calls, including empty metadata and unavailable getters. */
+  exposureCalls: number;
   success: boolean;
   error?: string;
 }
@@ -37,7 +41,7 @@ export const beginPerf = (id: string, tool: string): PerfCall | undefined => {
     tool,
     arrivedAt: now,
     startedAt: now,
-    queueMs: 0,
+    dispatchOverheadMs: 0,
     handlerMs: 0,
     byId: { count: 0, totalMs: 0, maxMs: 0 },
     pageLoadMs: 0,
@@ -45,6 +49,8 @@ export const beginPerf = (id: string, tool: string): PerfCall | undefined => {
     yieldMs: 0,
     traversalMs: 0,
     serializationMs: 0,
+    exposureMs: 0,
+    exposureCalls: 0,
     success: true,
   };
 };
@@ -68,7 +74,14 @@ export const perfStats = (params: {
     .slice(0, Math.min(200, Math.max(1, params.limit ?? 50)));
   const summary: Record<
     string,
-    { count: number; p50Ms: number; p95Ms: number; maxMs: number; byIdMs: number }
+    {
+      count: number;
+      p50Ms: number;
+      p95Ms: number;
+      maxMs: number;
+      byIdMs: number;
+      exposureMs: number;
+    }
   > = {};
   for (const tool of new Set(calls.map(call => call.tool))) {
     const rows = calls.filter(call => call.tool === tool);
@@ -79,6 +92,7 @@ export const perfStats = (params: {
       p95Ms: times[Math.ceil(times.length * 0.95) - 1]!,
       maxMs: times[times.length - 1]!,
       byIdMs: rows.reduce((sum, row) => sum + row.byId.totalMs, 0),
+      exposureMs: rows.reduce((sum, row) => sum + row.exposureMs, 0),
     };
   }
   const result = { calls, summary, bufferSize: size, since, enabled };

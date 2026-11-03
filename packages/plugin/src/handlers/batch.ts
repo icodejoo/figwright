@@ -2565,11 +2565,12 @@ const undoOp = async (
   op: ParsedOp,
   captured: Captured,
   result: unknown,
+  liveNodes: Map<string, BaseNode>,
 ): Promise<string | undefined> => {
   const own = await INVERSES[op.tool]!.undo(figmaCtx, op.params, captured.state, result);
   const overrides =
     captured.guard.length > 0 ? await restoreOverrideGuard(figmaCtx, captured.guard) : undefined;
-  await restoreLayoutDrift(figmaCtx, captured.layout);
+  await restoreLayoutDrift(figmaCtx, captured.layout, liveNodes);
   return notesOf([own, overrides]);
 };
 
@@ -2615,9 +2616,10 @@ export const createBatchHandler =
         // that didn't happen.
         const undoFailures: string[] = [];
         const residue: string[] = [];
+        const liveNodes = new Map<string, BaseNode>();
         for (let j = i - 1; j >= 0; j -= 1) {
           try {
-            const note = await undoOp(figmaCtx, ops[j]!, captured[j]!, results[j]);
+            const note = await undoOp(figmaCtx, ops[j]!, captured[j]!, results[j], liveNodes);
             if (note !== undefined) residue.push(`op ${j} (${ops[j]!.tool}): ${note}`);
           } catch (undoErr) {
             const m = undoErr instanceof Error ? undoErr.message : String(undoErr);

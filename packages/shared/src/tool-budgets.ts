@@ -29,6 +29,7 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   'save_screenshots',
   'save_image_fills',
   'export_pdf',
+  'export_node_data',
   'get_document',
   // Explicit sequential page preloading may outlive the ordinary read budget.
   'load_page',

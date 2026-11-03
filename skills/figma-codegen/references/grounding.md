@@ -225,12 +225,14 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   to the exported image so it isn't stretched or letterboxed. An image, video, pattern or shader paint
   that isn't fully opaque also carries its own **`opacity`** (0–1, separate from the node's): put it
   on that layer alone, the `<img>` or the layer carrying the background, not the whole element.
+  VIDEO also returns its non-empty `videoHash` when available; reuse it with `set_fills` /
+  `set_strokes` in the same file. These tools do not upload video.
 - **Image crop.** `CROP` is not a cover. It shows a chosen part of the image, which may be zoomed
   past cover, stretched to new proportions, rotated, or smaller than the layer and leave part of it
   empty. The fill carries **`cssTransform`**, ready to emit: put the original bytes
   (`save_image_fills`) in an `overflow: hidden` box as an `<img>` at `left: 0; top: 0`,
   `width: 100%; height: 100%`, `max-width: none`, `transform-origin: 0 0`, and give it
-  `transform: <cssTransform>` **verbatim**. The raw matrix is there too, as `imageTransform` (the
+  `transform: <cssTransform>` **verbatim**. The raw matrix is there too, as `imageTransform` for IMAGE or `videoTransform` for VIDEO (the
   layer's 0–1 box → the image's 0–1 space), but don't re-derive the CSS from it. Rendered against
   Figma, a pixel-aligned crop matched exactly. Others came within the same 2–6% of pixels that any
   scaled image differs by between the two renderers, where `object-fit: cover` was 97–100% off.

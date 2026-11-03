@@ -11,6 +11,7 @@ import {
 import type { Follower } from '../src/election/follower.js';
 import { portConflictMessage } from '../src/election/leader-lock.js';
 import { type Node, NodeRole } from '../src/election/node.js';
+import { configureServerPerf, serverPerfStats } from '../src/perf.js';
 import type { PluginSessionInfo } from '../src/routing/sessions.js';
 import { clearFileTarget, setFileTarget } from '../src/routing/target.js';
 import { captureNotices, withRoutingNotice } from '../src/tools/notices.js';
@@ -690,4 +691,30 @@ describe('ambiguous-routing notice', () => {
     );
     expect(text).toContain('(unnamed, session s-2)');
   });
+});
+
+it('records distinct correlated attempts, including follower transport errors', async () => {
+  configureServerPerf(true);
+  serverPerfStats({ reset: true });
+  const ids: string[] = [];
+  const node = makeNode({ isLeader: () => false });
+  const follower = makeFollower({
+    sendRpc: async (_tool, _args, requestId): Promise<RpcResponse> => {
+      ids.push(requestId!);
+      return ids.length === 1
+        ? { kind: 'err', requestId: requestId!, code: ErrorCode.Internal, message: 'fetch failed' }
+        : { kind: 'ok', requestId: requestId!, result: {} };
+    },
+  });
+  try {
+    await dispatchTool({ node, follower }, 'get_node', { nodeId: '1:2' }, { retryDelayMs: 0 });
+    expect(new Set(ids).size).toBe(2);
+    expect(serverPerfStats({})).toMatchObject([
+      { requestId: ids[1], success: true },
+      { requestId: ids[0], success: false },
+    ]);
+  } finally {
+    configureServerPerf(false);
+    serverPerfStats({ reset: true });
+  }
 });

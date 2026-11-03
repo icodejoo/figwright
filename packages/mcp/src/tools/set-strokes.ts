@@ -8,6 +8,8 @@ export const SET_STROKES_TOOL_NAME = 'set_strokes';
 export const setStrokesTool: ToolSpec = {
   name: SET_STROKES_TOOL_NAME,
   description:
+    'VIDEO accepts an existing videoHash returned by get_node / get_design_context, scaleMode (default FILL), videoTransform (CROP), scalingFactor, rotation and filters. No video upload is performed. ' +
+    'SHADER accepts shaderId already imported into the file and shaderProperties:[{id,value}] keyed by property-definition id; read metadata is ignored. This tool does not import shaders or create shader programs; Figma errors for unloaded ids pass through. ' +
     "Set a node's strokes (SOLID, gradient or PATTERN paints, same shape as set_fills) plus optional " +
     'strokeWeight, strokeAlign (INSIDE / OUTSIDE / CENTER), dashPattern (dashes), and per-side ' +
     'weights (strokeTopWeight / strokeRightWeight / strokeBottomWeight / strokeLeftWeight — for ' +

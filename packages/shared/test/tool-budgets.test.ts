@@ -21,6 +21,7 @@ describe('tool budgets', () => {
       'get_screenshot',
       'save_screenshots',
       'export_pdf',
+      'export_node_data',
       'get_document',
       'get_design_context',
       // Unbounded full-subtree serializations — at least as heavy as get_design_context on a large
@@ -54,6 +55,7 @@ describe('tool budgets', () => {
     for (const t of [
       'set_fills',
       'export_pdf',
+      'export_node_data',
       'search_nodes',
       'scan_nodes_by_types',
       'scan_text_nodes',

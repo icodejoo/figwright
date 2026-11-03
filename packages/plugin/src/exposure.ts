@@ -1,3 +1,5 @@
+import type { PerfCall } from './perf.js';
+
 /** Optional API metadata only: no inferred descendant scan or false/empty payload overhead. */
 export const readExposure = (
   node: SceneNode,
@@ -24,4 +26,18 @@ export const readExposure = (
     }
   }
   return out;
+};
+
+/** Only entered while recording; the disabled path calls readExposure directly. */
+export const measureExposure = (
+  node: SceneNode,
+  perf: PerfCall,
+): ReturnType<typeof readExposure> => {
+  const start = Date.now();
+  perf.exposureCalls++;
+  try {
+    return readExposure(node);
+  } finally {
+    perf.exposureMs += Date.now() - start;
+  }
 };

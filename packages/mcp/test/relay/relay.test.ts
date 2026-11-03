@@ -1275,3 +1275,15 @@ describe('Relay session pinning', () => {
     wsA.close();
   });
 });
+
+it('refuses a duplicate active bridge id without overwriting the first request', async () => {
+  const b = await startRelay();
+  await Promise.all([
+    expect(
+      b.relay.sendRequest('get_node', {}, 25, undefined, undefined, 'same-id'),
+    ).rejects.toThrow('plugin request timeout'),
+    expect(
+      b.relay.sendRequest('get_node', {}, 25, undefined, undefined, 'same-id'),
+    ).rejects.toThrow('duplicate in-flight bridge request id'),
+  ]);
+});

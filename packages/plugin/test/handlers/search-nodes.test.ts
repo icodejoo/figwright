@@ -349,3 +349,31 @@ it.each([true, false])(
     ).toEqual([]);
   },
 );
+
+describe('HEAD complex-tree evidence', () => {
+  const complexTree = () => {
+    const child = fake('I1:2;3:4', 'FRAME', 'Nested instance layer', [
+      fake('I1:2;3:4;5:6', 'TEXT', 'Nested label'),
+    ]);
+    const instance = Object.assign(fake('1:2', 'INSTANCE', 'Card instance', [child]), {
+      getMainComponentAsync: async () => ({ id: '9:1', name: 'Card', key: 'card-key' }),
+    });
+    const hidden = Object.assign(fake('2:1', 'RECTANGLE', 'Hidden locked'), {
+      visible: false,
+      locked: true,
+    });
+    const page = { id: '0:1', type: 'PAGE' };
+    Object.assign(instance, { parent: page });
+    Object.assign(hidden, { parent: page });
+    Object.assign(child, { parent: instance, locked: true });
+    Object.assign((child as FrameNode).children[0]!, { parent: child });
+    return [instance, hidden];
+  };
+  it.each([false, true])('pins all default/brief fields, brief=%s', async brief => {
+    const result = await createSearchNodesHandler(fakeFigma(complexTree()))({
+      name: '',
+      ...(brief ? { brief: true } : {}),
+    });
+    expect(result).toMatchSnapshot();
+  });
+});

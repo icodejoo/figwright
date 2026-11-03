@@ -278,6 +278,7 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
             served => {
               notice = relay.skewNotice(served);
             },
+            requestId,
           );
           writeMsgpack(res, 200, {
             kind: 'ok',

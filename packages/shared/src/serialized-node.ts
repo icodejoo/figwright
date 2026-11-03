@@ -160,6 +160,10 @@ const GradientPaintSchema = z.object({
  */
 const OtherPaintSchema = z.object({
   type: z.enum(['IMAGE', 'VIDEO']),
+  /** VIDEO only: existing file-local hash, reusable by set_fills / set_strokes; absent if empty. */
+  videoHash: z.string().optional(),
+  /** VIDEO CROP only: the Plugin API's 2×3 crop matrix (IMAGE uses imageTransform). */
+  videoTransform: z.array(z.array(z.number())).optional(),
   filters: z
     .object({
       exposure: z.number().optional(),

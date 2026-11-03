@@ -33,7 +33,7 @@ import {
   serializeComplexStroke,
   serializeVariableWidthStroke,
 } from './draw.js';
-import { readExposure } from './exposure.js';
+import { measureExposure, readExposure } from './exposure.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
 import { boundingBoxOf, orientationOf } from './orientation.js';
 import { lookupFor, measureStage, type PerfCall } from './perf.js';
@@ -239,14 +239,20 @@ const serializePaintValue = (paint: Paint, ownerSize: PaintOwnerSize | null): Se
   // so exported images get the right fit instead of being stretched. filtersApplied
   // flags in-fill colour grading, which the original bytes (save_image_fills) do NOT include — the
   // signal to export the composited render instead.
-  const media = paint as { scaleMode?: string; filters?: unknown; imageTransform?: Transform };
+  const media = paint as {
+    scaleMode?: string;
+    filters?: unknown;
+    imageTransform?: Transform;
+    videoTransform?: Transform;
+  };
   const scaleMode = media.scaleMode;
   const filtered = 'filters' in paint && hasImageAdjustments(media.filters);
-  // A CROP says which part of the image the layer shows, and only its imageTransform says which:
+  // A CROP says which part of the media the layer shows: IMAGE uses imageTransform, VIDEO uses
+  // videoTransform. Never fall back to the other paint type's field.
   // without it a crop reads as a centred cover, measured 97–100% of pixels off. The matrix means
   // nothing in the other modes, so it stays out of them.
-  const crop =
-    scaleMode === 'CROP' && Array.isArray(media.imageTransform) ? media.imageTransform : undefined;
+  const transform = paint.type === 'VIDEO' ? media.videoTransform : media.imageTransform;
+  const crop = scaleMode === 'CROP' && Array.isArray(transform) ? transform : undefined;
   const cssTransform = crop === undefined ? undefined : cssCropTransform(crop, ownerSize);
   return {
     type: paint.type,
@@ -255,7 +261,14 @@ const serializePaintValue = (paint: Paint, ownerSize: PaintOwnerSize | null): Se
     ...(scaleMode === undefined
       ? {}
       : { scaleMode: scaleMode as 'FILL' | 'FIT' | 'CROP' | 'TILE' }),
-    ...(crop === undefined ? {} : { imageTransform: crop.map(row => row.map(round6)) }),
+    ...(paint.type === 'VIDEO' && typeof paint.videoHash === 'string' && paint.videoHash.length > 0
+      ? { videoHash: paint.videoHash }
+      : {}),
+    ...(crop === undefined
+      ? {}
+      : paint.type === 'VIDEO'
+        ? { videoTransform: crop.map(row => row.map(round6)) }
+        : { imageTransform: crop.map(row => row.map(round6)) }),
     ...(cssTransform === undefined ? {} : { cssTransform }),
     ...(filtered ? { filtersApplied: true } : {}),
   };
@@ -642,8 +655,12 @@ const enrichWithMixins = (
   node: SceneNode,
   base: SerializedNode,
   parent: BaseNode | null,
+  perf?: PerfCall,
 ): SerializedNode => {
-  const out: SerializedNode = { ...base, ...readExposure(node) };
+  const out: SerializedNode = {
+    ...base,
+    ...(perf ? measureExposure(node, perf) : readExposure(node)),
+  };
 
   if (node.type === 'INSTANCE' && typeof node.scaleFactor === 'number' && node.scaleFactor !== 1)
     out.scaleFactor = node.scaleFactor;
@@ -1159,11 +1176,11 @@ export const inheritRepeat = async (
  * Synchronous serialization (no mainComponent). Used where async resolution isn't wanted, e.g. the
  * depth/detail-gated get_design_context view.
  */
-export const serializeFlatSync = (node: SceneNode): SerializedNode => {
+export const serializeFlatSync = (node: SceneNode, perf?: PerfCall): SerializedNode => {
   // Figma properties are native getters, not plain fields. Re-read neither a node's parent nor
   // its scalar/layout values during one snapshot; keep this local so later calls still see edits.
   const parent = node.parent;
-  return enrichWithMixins(node, toBase(node, parent), parent);
+  return enrichWithMixins(node, toBase(node, parent), parent, perf);
 };
 
 /** Resolve the main component of an INSTANCE (async; tolerates unavailable/missing components). */
@@ -1193,7 +1210,7 @@ const resolveMainComponent = async (
 };
 
 export const serializeFlat = async (node: SceneNode, perf?: PerfCall): Promise<SerializedNode> => {
-  const out = serializeFlatSync(node);
+  const out = serializeFlatSync(node, perf);
   const mainComponent = await resolveMainComponent(node);
   if (mainComponent !== undefined) out.mainComponent = mainComponent;
   await inheritRepeat(node, out, perf === undefined ? undefined : lookupFor(perf));

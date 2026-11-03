@@ -3048,3 +3048,132 @@ it('emits image/video scale only for TILE and rotation only outside CROP', () =>
     }
   }
 });
+
+describe('VIDEO paint read fields', () => {
+  const videoTransform: Transform = [
+    [0.5, 0, 0.25],
+    [0, 0.5, 0.125],
+  ];
+  const imageTransform: Transform = [
+    [1, 0, 0],
+    [0, 1, 0],
+  ];
+
+  it('reads VIDEO crop from videoTransform even if imageTransform is also present', () => {
+    expect(
+      serializePaint(
+        {
+          type: 'VIDEO',
+          videoHash: 'hash',
+          scaleMode: 'CROP',
+          videoTransform,
+          imageTransform,
+        } as unknown as Paint,
+        null,
+      ),
+    ).toEqual({
+      type: 'VIDEO',
+      visible: true,
+      opacity: 1,
+      scaleMode: 'CROP',
+      videoHash: 'hash',
+      videoTransform,
+      cssTransform: 'translate(-50%, -25%) scale(2, 2)',
+    });
+  });
+
+  it('never falls back to imageTransform for VIDEO', () => {
+    expect(
+      serializePaint(
+        { type: 'VIDEO', videoHash: 'hash', scaleMode: 'CROP', imageTransform } as unknown as Paint,
+        null,
+      ),
+    ).toEqual({
+      type: 'VIDEO',
+      visible: true,
+      opacity: 1,
+      scaleMode: 'CROP',
+      videoHash: 'hash',
+    });
+  });
+
+  it.each([null, '', undefined])('omits unavailable videoHash (%s)', videoHash => {
+    expect(
+      serializePaint(
+        { type: 'VIDEO', videoHash, scaleMode: 'FILL', videoTransform } as unknown as Paint,
+        null,
+      ),
+    ).toEqual({
+      type: 'VIDEO',
+      visible: true,
+      opacity: 1,
+      scaleMode: 'FILL',
+    });
+  });
+
+  it('leaves IMAGE output unchanged and never leaks VIDEO-only fields', () => {
+    expect(
+      serializePaint(
+        {
+          type: 'IMAGE',
+          imageHash: 'image',
+          scaleMode: 'CROP',
+          imageTransform,
+          videoTransform,
+          videoHash: 'wrong',
+        } as unknown as Paint,
+        null,
+      ),
+    ).toEqual({
+      type: 'IMAGE',
+      visible: true,
+      opacity: 1,
+      scaleMode: 'CROP',
+      imageTransform,
+      cssTransform: 'translate(0%, 0%) scale(1, 1)',
+    });
+  });
+
+  it.each([
+    [
+      { type: 'SOLID', color: { r: 1, g: 0, b: 0 } },
+      { type: 'SOLID', color: { r: 1, g: 0, b: 0 }, visible: true, opacity: 1 },
+    ],
+    [
+      { type: 'SHADER', id: 'shader' },
+      { type: 'SHADER', shaderId: 'shader', visible: true, opacity: 1 },
+    ],
+    [
+      { type: 'GRADIENT_RADIAL', gradientStops: [], gradientTransform: imageTransform },
+      {
+        type: 'GRADIENT_RADIAL',
+        gradientStops: [],
+        gradientTransform: imageTransform,
+        visible: true,
+        opacity: 1,
+      },
+    ],
+    [
+      {
+        type: 'PATTERN',
+        sourceNodeId: '1:2',
+        tileType: 'RECTANGULAR',
+        scalingFactor: 1,
+        spacing: { x: 0, y: 0 },
+        horizontalAlignment: 'START',
+      },
+      {
+        type: 'PATTERN',
+        sourceNodeId: '1:2',
+        tileType: 'RECTANGULAR',
+        scalingFactor: 1,
+        visible: true,
+        opacity: 1,
+      },
+    ],
+  ])('leaves non-media output unchanged: %j', (input, expected) => {
+    expect(
+      serializePaint({ ...input, videoHash: 'wrong', videoTransform } as unknown as Paint, null),
+    ).toEqual(expected);
+  });
+});

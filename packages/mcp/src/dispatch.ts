@@ -1,7 +1,8 @@
-import { ErrorCode, getFollowerBudget, getRelayBudget } from '@figwright/shared';
+import { newId, ErrorCode, getFollowerBudget, getRelayBudget } from '@figwright/shared';
 
 import type { Follower } from './election/follower.js';
 import { type Node, NodeRole } from './election/node.js';
+import { observeTool } from './perf.js';
 import type { PluginSessionInfo } from './routing/sessions.js';
 import { getFileTarget, resolveFileTarget } from './routing/target.js';
 import { namedSessions, type SessionDispatch } from './tools/list-files.js';
@@ -35,7 +36,7 @@ export class DispatchError extends Error {
   }
 }
 
-export const dispatchTool = async (
+const dispatchAttempt = async (
   ctx: DispatchContext,
   toolName: string,
   args: unknown,
@@ -76,6 +77,7 @@ export const dispatchTool = async (
       // conflict is over has already been decided one line up, by the role, which is the fact —
       // the signal is only how the previous attempt was interrupted.
       conflicted = new AbortController();
+      const requestId = newId();
 
       if (ctx.node.isLeader()) {
         const leader = ctx.node.getLeader();
@@ -91,12 +93,18 @@ export const dispatchTool = async (
           // fires first. opts.perCallTimeoutMs overrides for callers/tests that need a specific value.
           // Attribution is captured as the request is answered, not read afterwards: two concurrent
           // calls to plugins on different builds would otherwise both see whichever finished last.
-          const result = await leader.relay.sendRequest(
+          const result = await observeTool(
             toolName,
-            args,
-            opts.perCallTimeoutMs ?? getRelayBudget(toolName),
-            opts.sessionId,
-            served => reportSkew(leader.relay.skewNotice(served)),
+            () =>
+              leader.relay.sendRequest(
+                toolName,
+                args,
+                opts.perCallTimeoutMs ?? getRelayBudget(toolName),
+                opts.sessionId,
+                served => reportSkew(leader.relay.skewNotice(served)),
+                requestId,
+              ),
+            requestId,
           );
           return result;
         } catch (err) {
@@ -107,13 +115,18 @@ export const dispatchTool = async (
 
       // Follower→leader budget = B + two margins (outermost layer), so it outlives the leader's own
       // relay timer for the same tool.
-      const resp = await ctx.follower.sendRpc(
+      const resp = await observeTool(
         toolName,
-        args,
-        undefined,
-        opts.sessionId,
-        opts.perCallTimeoutMs ?? getFollowerBudget(toolName),
-        conflicted.signal,
+        () =>
+          ctx.follower.sendRpc(
+            toolName,
+            args,
+            requestId,
+            opts.sessionId,
+            opts.perCallTimeoutMs ?? getFollowerBudget(toolName),
+            conflicted.signal,
+          ),
+        requestId,
       );
       if (resp.kind === 'ok') {
         reportSkew(resp.notice ?? null);
@@ -142,6 +155,16 @@ export const dispatchTool = async (
   } finally {
     stopWatching();
   }
+};
+
+// One bridge id per dispatch, forwarded through followers to the sandbox.
+export const dispatchTool = (
+  ctx: DispatchContext,
+  toolName: string,
+  args: unknown,
+  opts: DispatchOptions = {},
+): Promise<unknown> => {
+  return dispatchAttempt(ctx, toolName, args, opts);
 };
 
 /**

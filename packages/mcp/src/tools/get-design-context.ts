@@ -8,6 +8,7 @@ export const GET_DESIGN_CONTEXT_TOOL_NAME = 'get_design_context';
 export const getDesignContextTool: ToolSpec = {
   name: GET_DESIGN_CONTEXT_TOOL_NAME,
   description:
+    'VIDEO paints include a non-empty videoHash when available (reusable by set_fills / set_strokes) and videoTransform for CROP; IMAGE uses imageTransform. ' +
     'Get a depth-limited, token-efficient node tree — the main design-grounding read; prefer it ' +
     'over get_document / get_node for anything large. Starts from nodeId (a pasted Figma URL also ' +
     'works), else the current selection; errors when neither is available. ' +

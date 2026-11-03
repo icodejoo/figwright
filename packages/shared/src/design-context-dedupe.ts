@@ -117,6 +117,10 @@ export interface SimplifiedPaint {
   scaleMode?: string;
   /** CROP: the layer box → image space matrix, i.e. which part of the image shows. */
   imageTransform?: number[][];
+  /** VIDEO only: existing file-local asset hash, reusable by the write tools. */
+  videoHash?: string;
+  /** VIDEO CROP uses videoTransform rather than IMAGE's imageTransform. */
+  videoTransform?: number[][];
   /** CROP: ready-to-emit transform for an `<img>` filling its box from the top-left. */
   cssTransform?: string;
   /**
@@ -186,6 +190,12 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
     out.opacity = paint.opacity;
   }
   if (paint.blendMode !== undefined) out.blendMode = paint.blendMode;
+  if (paint.type === 'VIDEO') {
+    if (typeof paint.videoHash === 'string' && paint.videoHash.length > 0)
+      out.videoHash = paint.videoHash;
+    if (paint.scaleMode === 'CROP' && paint.videoTransform !== undefined)
+      out.videoTransform = paint.videoTransform;
+  }
   if (paint.type === 'IMAGE' || paint.type === 'VIDEO') {
     if (paint.filters !== undefined) out.filters = paint.filters;
     if (paint.scaleMode !== 'CROP' && paint.rotation !== undefined && paint.rotation !== 0)

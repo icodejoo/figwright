@@ -1,6 +1,7 @@
-import type { MutateResult } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { type GetNodeResult, type MutateResult, SerializedPaintSchema } from '@figwright/shared';
+import { describe, expect, it, vi } from 'vitest';
 
+import { createGetNodeHandler } from '../../src/handlers/get-node.js';
 import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
 
 const fakeFigma = (
@@ -262,4 +263,153 @@ it('preserves paint-level blends across serializer, codegen simplification and S
     scalingFactor: 0.5,
     filters: { contrast: 0.3 },
   });
+});
+
+describe('existing VIDEO and SHADER paints', () => {
+  it('uses async dynamic-page writes and preserves all video paint fields', async () => {
+    const setFillsAsync = vi.fn<(paints: readonly Paint[]) => Promise<void>>(async () => {});
+    const node = {
+      id: '1:1',
+      get fills() {
+        return [];
+      },
+      set fills(_v: unknown) {
+        throw new Error('sync forbidden');
+      },
+      setFillsAsync,
+    };
+    const paint = {
+      type: 'VIDEO',
+      videoHash: 'existing-hash',
+      scaleMode: 'CROP',
+      videoTransform: [
+        [1, 0, 0.25],
+        [0, 1, 0],
+      ],
+      scalingFactor: 2,
+      rotation: 90,
+      filters: { contrast: 0.3 },
+      opacity: 0.5,
+      visible: false,
+      blendMode: 'MULTIPLY',
+    };
+    expect(
+      await createSetFillsHandler(fakeFigma({ '1:1': node }))({ nodeId: '1:1', fills: [paint] }),
+    ).toEqual({ ok: true, nodeId: '1:1' });
+    expect(setFillsAsync).toHaveBeenCalledWith([paint]);
+  });
+  it('maps shader property ids, preserves aliases, and excludes read metadata', async () => {
+    const setFillsAsync = vi.fn<(paints: readonly Paint[]) => Promise<void>>(async () => {});
+    const node = { id: '1:1', fills: [], setFillsAsync };
+    await createSetFillsHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      fills: [
+        {
+          type: 'SHADER',
+          shaderId: 'shader',
+          opacity: 1,
+          visible: true,
+          shaderProperties: [
+            { id: 'amount', name: 'Amount', type: 'NUMBER', value: 0.4 },
+            { id: 'color', value: { type: 'VARIABLE_ALIAS', id: 'V:1' } },
+          ],
+        },
+      ],
+    });
+    expect(setFillsAsync).toHaveBeenCalledWith([
+      {
+        type: 'SHADER',
+        id: 'shader',
+        opacity: 1,
+        visible: true,
+        properties: { amount: 0.4, color: { type: 'VARIABLE_ALIAS', id: 'V:1' } },
+      },
+    ]);
+  });
+  it('keeps native errors and does not import assets implicitly', async () => {
+    const error = new Error('Shader not imported. Call figma.importShaderById(id) first.');
+    const node = {
+      id: '1:1',
+      fills: [],
+      setFillsAsync: vi.fn<() => Promise<void>>().mockRejectedValue(error),
+    };
+    await expect(
+      createSetFillsHandler(fakeFigma({ '1:1': node }))({
+        nodeId: '1:1',
+        fills: [{ type: 'SHADER', shaderId: 'unloaded' }],
+      }),
+    ).rejects.toBe(error);
+    await expect(
+      createSetFillsHandler(fakeFigma({ '1:1': node }))({
+        nodeId: '1:1',
+        fills: [{ type: 'VIDEO' }],
+      }),
+    ).rejects.toThrow('videoHash');
+  });
+});
+
+describe('VIDEO read/write round trip', () => {
+  it.each(['FILL', 'FIT', 'CROP', 'TILE'] as const)(
+    'preserves mixed SOLID/VIDEO fills in %s',
+    async scaleMode => {
+      const node = {
+        id: '1:1',
+        name: 'Media',
+        type: 'RECTANGLE',
+        visible: true,
+        locked: false,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 100,
+        parent: { id: '0:1' },
+        fills: [
+          { type: 'SOLID', color: { r: 1, g: 0, b: 0 }, visible: true, opacity: 1 },
+          {
+            type: 'VIDEO',
+            videoHash: 'file-local-video',
+            scaleMode,
+            visible: false,
+            opacity: 0.5,
+            blendMode: 'MULTIPLY',
+            filters: { contrast: 0.3, exposure: -0.2 },
+            ...(scaleMode === 'CROP'
+              ? {
+                  videoTransform: [
+                    [0.5, 0, 0.25],
+                    [0, 0.5, 0.125],
+                  ],
+                }
+              : { rotation: 90 }),
+            ...(scaleMode === 'TILE' ? { scalingFactor: 2 } : {}),
+          },
+        ] as Paint[],
+      };
+      const original = structuredClone(node.fills);
+      const ctx = fakeFigma({ '1:1': node });
+      const read = createGetNodeHandler(ctx);
+      const before = (await read({ nodeId: node.id })) as GetNodeResult;
+      const readFills = before.node!.fills;
+      if (readFills === undefined || readFills === 'mixed') throw new Error('expected paint array');
+      const fills = readFills.map(paint => SerializedPaintSchema.parse(paint));
+      expect(fills[1]).toHaveProperty('videoHash', 'file-local-video');
+      expect(fills[1]).toMatchObject(
+        scaleMode === 'CROP'
+          ? {
+              videoTransform: [
+                [0.5, 0, 0.25],
+                [0, 0.5, 0.125],
+              ],
+            }
+          : { scaleMode },
+      );
+      expect(fills[1]).not.toHaveProperty('imageTransform');
+      expect(await createSetFillsHandler(ctx)({ nodeId: node.id, fills })).toEqual({
+        ok: true,
+        nodeId: node.id,
+      });
+      expect(node.fills).toEqual(original);
+      expect(await read({ nodeId: node.id })).toEqual(before);
+    },
+  );
 });

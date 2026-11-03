@@ -1,7 +1,8 @@
 import type { ComponentPropertyApiEntry, GetComponentApiResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { readExposure } from '../exposure.js';
+import { measureExposure, readExposure } from '../exposure.js';
+import { measureStage, perfFor } from '../perf.js';
 import { componentDocumentation } from './component-documentation.js';
 
 /**
@@ -71,7 +72,10 @@ export const createGetComponentApiHandler =
       properties,
     };
     if ('visible' in node) {
-      const { exposedInstances } = readExposure(node);
+      const perf = perfFor(figmaCtx);
+      const { exposedInstances } = perf
+        ? await measureStage(perf, 'serializationMs', async () => measureExposure(node, perf))
+        : readExposure(node);
       if (exposedInstances !== undefined) result.exposedInstances = exposedInstances;
     }
     return result;

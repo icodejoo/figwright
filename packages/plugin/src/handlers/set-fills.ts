@@ -7,8 +7,9 @@ import { writePaints } from './paints.js';
 
 /**
  * Convert a serialized paint back to a Figma Paint. SOLID, the four gradient types (round-tripping
- * serializePaint's gradientStops + gradientTransform) and PATTERN are supported. IMAGE/VIDEO are
- * not writable here — set_image_fill puts an image into a fill, import_image places a new one.
+ * serializePaint's gradientStops + gradientTransform) PATTERN, existing VIDEO hashes and imported
+ * SHADER ids are supported. IMAGE is not writable here — set_image_fill puts an image into a fill,
+ * import_image places a new one.
  */
 export const toFigmaPaint = (paint: SerializedPaint, figmaCtx: typeof figma): Paint => {
   if (paint.type === 'SOLID') {
@@ -44,6 +45,61 @@ export const toFigmaPaint = (paint: SerializedPaint, figmaCtx: typeof figma): Pa
       visible: paint.visible,
     } as GradientPaint;
   }
+  if (paint.type === 'VIDEO') {
+    const video = paint;
+    if (typeof video.videoHash !== 'string' || video.videoHash.length === 0)
+      throw new TypeError(
+        'VIDEO: an existing videoHash is required; this tool does not upload video',
+      );
+    if (video.scaleMode !== undefined && !['FILL', 'FIT', 'CROP', 'TILE'].includes(video.scaleMode))
+      throw new TypeError('VIDEO: invalid scaleMode');
+    if (
+      video.videoTransform !== undefined &&
+      (!Array.isArray(video.videoTransform) ||
+        video.videoTransform.length !== 2 ||
+        video.videoTransform.some(
+          row =>
+            !Array.isArray(row) ||
+            row.length !== 3 ||
+            row.some(v => typeof v !== 'number' || !Number.isFinite(v)),
+        ))
+    )
+      throw new TypeError('VIDEO: videoTransform must be a 2×3 matrix');
+    return {
+      type: 'VIDEO',
+      videoHash: video.videoHash,
+      scaleMode: video.scaleMode ?? 'FILL',
+      ...(video.videoTransform === undefined
+        ? {}
+        : { videoTransform: video.videoTransform as unknown as Transform }),
+      ...(video.scalingFactor === undefined ? {} : { scalingFactor: video.scalingFactor }),
+      ...(video.rotation === undefined ? {} : { rotation: video.rotation }),
+      ...(video.filters === undefined
+        ? {}
+        : {
+            filters: Object.fromEntries(
+              Object.entries(video.filters).filter(([, value]) => value !== undefined),
+            ) as ImageFilters,
+          }),
+      ...(paint.blendMode === undefined ? {} : { blendMode: paint.blendMode as BlendMode }),
+      opacity: paint.opacity,
+      visible: paint.visible,
+    };
+  }
+  if (paint.type === 'SHADER') {
+    if (typeof paint.shaderId !== 'string' || paint.shaderId.length === 0)
+      throw new TypeError('SHADER: shaderId of an already imported shader is required');
+    return {
+      type: 'SHADER',
+      id: paint.shaderId,
+      ...(paint.shaderProperties === undefined
+        ? {}
+        : { properties: Object.fromEntries(paint.shaderProperties.map(p => [p.id, p.value])) }),
+      ...(paint.blendMode === undefined ? {} : { blendMode: paint.blendMode as BlendMode }),
+      opacity: paint.opacity,
+      visible: paint.visible,
+    };
+  }
   if (paint.type === 'PATTERN') {
     // The serializer leaves out the no-op defaults (no spacing, START alignments) and an agent may
     // too; Figma wants every field, so they are filled back in here.
@@ -65,7 +121,7 @@ export const toFigmaPaint = (paint: SerializedPaint, figmaCtx: typeof figma): Pa
     } as unknown as Paint;
   }
   throw new TypeError(
-    `set_fills: unsupported paint type ${paint.type} (SOLID, gradients and PATTERN) — put an ` +
+    `set_fills: unsupported paint type ${paint.type} (SOLID, gradients, PATTERN, VIDEO and SHADER) — put an ` +
       'image into a fill with set_image_fill',
   );
 };

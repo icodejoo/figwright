@@ -85,7 +85,7 @@ const postAbdicate = async (
 
 const attachFakePlugin = async (
   b: Bound,
-  handle: (method: string, params: unknown) => Promise<unknown>,
+  handle: (method: string, params: unknown, id: string) => Promise<unknown>,
   clientVersion: string = MIN_PLUGIN_VERSION,
 ): Promise<WebSocket> => {
   const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
@@ -110,7 +110,7 @@ const attachFakePlugin = async (
       env.method !== SystemMethod.Ping &&
       env.method !== SystemMethod.Hello
     ) {
-      const result = await handle(env.method, env.params);
+      const result = await handle(env.method, env.params, env.id);
       ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result })));
     }
   });
@@ -696,5 +696,17 @@ describe('checkWireArgs', () => {
         0,
       ),
     ).toBeNull();
+  });
+});
+
+it('preserves follower request ids through HTTP RPC and the WebSocket bridge', async () => {
+  const b = await startLeader();
+  await attachFakePlugin(b, async (_method, _params, id) => ({ bridgeId: id }));
+  expect(
+    await callRpc(b.port, { requestId: 'perf-correlated-id', toolName: 'get_selection', args: {} }),
+  ).toMatchObject({
+    kind: 'ok',
+    requestId: 'perf-correlated-id',
+    result: { bridgeId: 'perf-correlated-id' },
   });
 });

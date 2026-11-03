@@ -1,3 +1,4 @@
+import { DESIGN_CONTEXT_BAIL_NODES } from '@figwright/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createToolCall } from '../protocol/bridge.js';
@@ -8,7 +9,7 @@ import { createSandboxHandlers } from '../src/handlers/registry.js';
 import { createIdempotencyCache } from '../src/idempotency.js';
 import { withInstanceIdLookup } from '../src/node-lookup.js';
 import { beginPerf, finishPerf, perfStats, withPerfApi } from '../src/perf.js';
-import { serializeTrees } from '../src/serializer.js';
+import { serializeFlatSync, serializeTrees } from '../src/serializer.js';
 import { collectMatches } from '../src/traverse.js';
 
 afterEach(() => {
@@ -20,7 +21,7 @@ describe('performance observations', () => {
   it('does not allocate records by default; records only after enabling', () => {
     expect(beginPerf('disabled', 'get_node')).toBeUndefined();
     perfStats({ enabled: true });
-    expect(call()).toMatchObject({ tool: 'get_node', queueMs: 0 });
+    expect(call()).toMatchObject({ tool: 'get_node', dispatchOverheadMs: 0 });
   });
   it('retains the newest 200 completions and computes nearest-rank percentiles of returned rows', () => {
     perfStats({ enabled: true });
@@ -156,6 +157,141 @@ describe('performance observations', () => {
     expect(measured).toEqual(plain);
     expect(row.serializationMs).toBeGreaterThanOrEqual(5);
   });
+  it('accumulates exposure time inside serialization once and summarizes only returned calls', async () => {
+    perfStats({ enabled: true });
+    let now = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const node = {
+      id: '1:1',
+      type: 'INSTANCE',
+      name: 'instance',
+      parent: null,
+      x: 0,
+      y: 0,
+      height: 10,
+      get width() {
+        now += 5;
+        return 10;
+      },
+      get isExposedInstance() {
+        now += 2;
+        return true;
+      },
+      get exposedInstances() {
+        now += 3;
+        return [{ id: 'nested' }];
+      },
+    } as unknown as SceneNode;
+    const first = call('first');
+    const second = call('second');
+    const [a, b] = await Promise.all([
+      serializeTrees([node, node], null, first),
+      serializeTrees([node], null, second),
+    ]);
+    expect(a.nodes[0]).toMatchObject({ isExposedInstance: true, exposedInstances: ['nested'] });
+    expect(b.nodes[0]).toEqual(a.nodes[0]);
+    expect(first).toMatchObject({ exposureMs: 10, exposureCalls: 2 });
+    expect(second).toMatchObject({ exposureMs: 5, exposureCalls: 1 });
+    finishPerf(first);
+    finishPerf(second);
+    expect(perfStats({}).summary.get_node!.exposureMs).toBe(15);
+    expect(perfStats({ limit: 1 }).summary.get_node!.exposureMs).toBe(5);
+
+    // No concurrent wall time here: 5ms scalar read + 5ms exposure, not 15ms.
+    const single = call('single');
+    await serializeTrees([node], null, single);
+    expect(single).toMatchObject({ serializationMs: 10, exposureMs: 5, exposureCalls: 1 });
+  });
+  it('preserves the disabled exposure getter path with no synchronous clock reads or output fields', () => {
+    const reads: string[] = [];
+    const node = {
+      id: '1:1',
+      type: 'INSTANCE',
+      name: 'instance',
+      parent: null,
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      get isExposedInstance() {
+        reads.push('flag');
+        return true;
+      },
+      get exposedInstances() {
+        reads.push('instances');
+        throw new Error('unavailable');
+      },
+    } as unknown as SceneNode;
+    const clock = vi.spyOn(Date, 'now');
+    const out = serializeFlatSync(node);
+    expect(reads).toEqual(['flag', 'instances']);
+    expect(clock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ isExposedInstance: true });
+    expect(out).not.toHaveProperty('exposureMs');
+    expect(out).not.toHaveProperty('exposureCalls');
+    expect(perfStats({}).calls).toEqual([]);
+  });
+  it.each(['get_design_context', 'get_component_api'])(
+    'times exposure through the scoped %s handler, including unavailable getters',
+    async tool => {
+      perfStats({ enabled: true });
+      let now = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+      const node = {
+        id: '1:1',
+        type: 'COMPONENT',
+        name: 'component',
+        parent: null,
+        visible: true,
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        componentPropertyDefinitions: {},
+        get exposedInstances() {
+          now += 4;
+          throw new Error('unavailable');
+        },
+      } as unknown as SceneNode;
+      const api = { getNodeByIdAsync: async () => node } as unknown as typeof figma;
+      const row = call('scoped', tool);
+      const handlers = createSandboxHandlers(withPerfApi(api, row));
+      await handlers[tool]!({ nodeId: node.id, detail: 'full' });
+      expect(row).toMatchObject({ exposureMs: 4, exposureCalls: 1 });
+      expect(row.serializationMs).toBe(4);
+    },
+  );
+  it('keeps section-plan exposure inside its serialization stage', async () => {
+    perfStats({ enabled: true });
+    let now = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const child = { id: 'child', type: 'RECTANGLE', name: 'child' };
+    const node = {
+      id: 'root',
+      type: 'FRAME',
+      name: 'root',
+      parent: null,
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      children: Array.from({ length: DESIGN_CONTEXT_BAIL_NODES }, () => child),
+      get exposedInstances() {
+        now += 6;
+        return [];
+      },
+    } as unknown as SceneNode;
+    const api = { getNodeByIdAsync: async () => node } as unknown as typeof figma;
+    const row = call('plan', 'get_design_context');
+    const handlers = createSandboxHandlers(withPerfApi(api, row));
+    const result = await handlers.get_design_context!({
+      nodeId: node.id,
+      detail: 'full',
+      budget: true,
+    });
+    expect(result).toHaveProperty('sectionPlan');
+    expect(row).toMatchObject({ exposureMs: 6, exposureCalls: 1, serializationMs: 6 });
+  });
   it('records failure text without changing dispatcher replies', async () => {
     perfStats({ enabled: true });
     const outcome = await dispatchSandboxMessage({
@@ -229,4 +365,30 @@ describe('load_page', () => {
     await expect(handler({ all: true, pageId: 'first' })).rejects.toThrow('mutually exclusive');
     await expect(handler({ pageId: 'missing' })).rejects.toThrow('page not found');
   });
+});
+
+it('names synchronous dispatch overhead without claiming pre-delivery queue time', async () => {
+  perfStats({ enabled: true });
+  let now = 100;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+  await dispatchSandboxMessage({
+    raw: createToolCall({ id: 'bridge', method: 'read', params: {} }),
+    handlers: {},
+    editorType: 'figma',
+    scopedHandlers: () => {
+      now += 3;
+      return {
+        read: () => {
+          now += 7;
+          return {};
+        },
+      };
+    },
+  });
+  expect(perfStats({}).calls[0]).toMatchObject({
+    id: 'bridge',
+    dispatchOverheadMs: 3,
+    handlerMs: 7,
+  });
+  expect(perfStats({}).calls[0]).not.toHaveProperty('queueMs');
 });

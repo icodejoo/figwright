@@ -146,8 +146,10 @@ export class Relay {
      *   reaches nobody, which is precisely what shipped until an end-to-end test caught it.
      */
     onServed?: (servingSessionId: string | undefined) => void,
+    requestId?: string,
   ): Promise<unknown> {
-    const id = newId();
+    const id = requestId ?? newId();
+    if (this.pending.has(id)) throw new Error(`duplicate in-flight bridge request id: ${id}`);
     this.lastRequestAtMs = Date.now();
     const served: { sessionId: string | undefined } = { sessionId: undefined };
     try {

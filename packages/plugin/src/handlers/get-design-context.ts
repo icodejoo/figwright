@@ -16,7 +16,7 @@ import {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { measureStage, perfFor } from '../perf.js';
+import { measureStage, perfFor, type PerfCall } from '../perf.js';
 import { inheritRepeat, serializeCodeSyntax, serializeFlatSync } from '../serializer.js';
 import { displayP3Marker } from './color-profile.js';
 
@@ -53,7 +53,11 @@ const cleanStyleIds = (ids: Record<string, string>): Record<string, string> => {
  * projection silently drops it). The guard diffs these fields against SerializedNodeSchema so a new
  * serializer dimension fails a test instead of silently missing from codegen grounding.
  */
-export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
+export const project = (
+  node: SceneNode,
+  detail: DetailLevel,
+  perf?: PerfCall,
+): DesignContextNode => {
   if (detail === 'minimal') return { id: node.id, name: node.name, type: node.type };
   if (detail === 'compact') {
     const out: DesignContextNode = {
@@ -71,7 +75,7 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   }
 
   // full — unchanged from the original projection: serializeFlatSync once, every field from flat.
-  const flat = serializeFlatSync(node);
+  const flat = serializeFlatSync(node, perf);
   const out: DesignContextNode = { id: flat.id, name: flat.name, type: flat.type };
   if (flat.scaleFactor !== undefined) out.scaleFactor = flat.scaleFactor;
   if (flat.limitViolations !== undefined) out.limitViolations = flat.limitViolations;
@@ -505,6 +509,7 @@ const breakpointHint = (roots: readonly SceneNode[]): string | undefined => {
 };
 
 interface BuildCtx {
+  perf: PerfCall | undefined;
   detail: DetailLevel;
   dedupe: boolean;
   seen: Set<string>;
@@ -563,7 +568,10 @@ export const VISUAL_OVERRIDE_FIELDS = [
  * override. Hidden state and each field are only emitted when present, so an instance with only
  * text changes yields nothing.
  */
-const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknown>[] => {
+const collectPropertyOverrides = (
+  instance: InstanceNode,
+  perf?: PerfCall,
+): Record<string, unknown>[] => {
   // Which descendant nodes Figma reports a non-text visual override on (id → changed fields). We
   // read instance.overrides for the *what changed*, then walk the subtree (like collectTextOverrides)
   // for the actual values — no figma.getNodeById, so this stays sync and dependency-free.
@@ -591,7 +599,7 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
   const out: Record<string, unknown>[] = [];
   const visit = (n: SceneNode): void => {
     if (overridden.has(n.id)) {
-      const proj = project(n, 'full') as unknown as Record<string, unknown>;
+      const proj = project(n, 'full', perf) as unknown as Record<string, unknown>;
       const entry: Record<string, unknown> = { name: n.name };
       if (n.visible === false) entry.visible = false;
       for (const f of VISUAL_OVERRIDE_FIELDS) {
@@ -688,7 +696,7 @@ const buildNode = async (
   remainingDepth: number,
   ctx: BuildCtx,
 ): Promise<DesignContextNode> => {
-  const out = project(node, ctx.detail);
+  const out = project(node, ctx.detail, ctx.perf);
   if (ctx.detail === 'full') await inheritRepeat(node, out, ctx.lookup);
 
   // Motion is a Motion-API dimension (not a serializer field), so it's attached here rather than in
@@ -728,7 +736,7 @@ const buildNode = async (
           expandChildren = false;
           const overrides = collectTextOverrides(node);
           if (overrides.length > 0) out.textOverrides = overrides;
-          const propOverrides = collectPropertyOverrides(node as InstanceNode);
+          const propOverrides = collectPropertyOverrides(node as InstanceNode, ctx.perf);
           if (propOverrides.length > 0) {
             out.propertyOverrides = propOverrides as unknown as NonNullable<
               DesignContextNode['propertyOverrides']
@@ -788,6 +796,7 @@ const MAX_PLAN_SECTIONS = 60;
 const sectionPlanResult = (
   roots: readonly SceneNode[],
   totalNodes: number,
+  perf?: PerfCall,
 ): GetDesignContextResult => {
   let sectionNodes: readonly SceneNode[] = roots;
   for (let hops = 0; hops < 2 && sectionNodes.length === 1; hops += 1) {
@@ -818,7 +827,7 @@ const sectionPlanResult = (
       'whole page.',
     // The roots keep their own layout: a plan tells the caller which sections to ground, but it is
     // the root's layout that says how to build the container they go into (see planRootFrom).
-    nodes: roots.map(node => planRootFrom(project(node, 'full'))),
+    nodes: roots.map(node => planRootFrom(project(node, 'full', perf))),
     sectionPlan: {
       reason: 'node-count',
       totalNodes,
@@ -855,6 +864,7 @@ export const createGetDesignContextHandler =
     // depth omitted or 0 → unlimited (-1); positive → that many levels of children.
     const remainingDepth = typeof p.depth === 'number' && p.depth > 0 ? p.depth : -1;
     const ctx: BuildCtx = {
+      perf: perfFor(figmaCtx),
       detail: isDetailLevel(p.detail) ? p.detail : 'compact',
       dedupe: p.dedupeComponents === true,
       seen: new Set<string>(),
@@ -899,7 +909,13 @@ export const createGetDesignContextHandler =
     // that's the branch whose per-node serialization + per-TEXT segment calls are worth skipping.
     if (p.budget === true && ctx.detail === 'full') {
       const total = countNodes(roots, remainingDepth);
-      if (total > DESIGN_CONTEXT_BAIL_NODES) return sectionPlanResult(roots, total);
+      if (total > DESIGN_CONTEXT_BAIL_NODES) {
+        return ctx.perf
+          ? measureStage(ctx.perf, 'serializationMs', async () =>
+              sectionPlanResult(roots, total, ctx.perf),
+            )
+          : sectionPlanResult(roots, total);
+      }
     }
 
     const nodes = await measureStage(perfFor(figmaCtx), 'serializationMs', () =>

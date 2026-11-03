@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "fields": [
     "colorProfile",
     "globalVars",
@@ -222,6 +222,8 @@
     "nodes[].fills[].tileType",
     "nodes[].fills[].type",
     "nodes[].fills[].verticalAlignment",
+    "nodes[].fills[].videoHash",
+    "nodes[].fills[].videoTransform",
     "nodes[].fills[].visible",
     "nodes[].flipped",
     "nodes[].fontName",
@@ -455,6 +457,8 @@
     "nodes[].strokes[].tileType",
     "nodes[].strokes[].type",
     "nodes[].strokes[].verticalAlignment",
+    "nodes[].strokes[].videoHash",
+    "nodes[].strokes[].videoTransform",
     "nodes[].strokes[].visible",
     "nodes[].styleIds",
     "nodes[].styleIds.effect",

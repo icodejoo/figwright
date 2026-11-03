@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeMetrics, dedupeStyles } from '../src/design-context-dedupe.js';
+import { computeMetrics, dedupeStyles, simplifyPaint } from '../src/design-context-dedupe.js';
 import type { DesignContextNode } from '../src/design-context.js';
 
 const solid = (r: number, g: number, b: number, opacity = 1) => ({
@@ -775,4 +775,81 @@ it('filters automatic image/video scale and CROP rotation before deduplication',
       expect(Reflect.get(out!, 'rotation')).toBe(scaleMode === 'CROP' ? undefined : 90);
     }
   }
+});
+
+describe('VIDEO grounding preserves asset identity and crop', () => {
+  const videoTransform = [
+    [0.5, 0, 0.25],
+    [0, 0.5, 0.125],
+  ];
+  const video = {
+    type: 'VIDEO' as const,
+    visible: true,
+    opacity: 1,
+    scaleMode: 'CROP' as const,
+    videoHash: 'video-a',
+    videoTransform,
+  };
+
+  it('keeps VIDEO fields in direct simplified paints', () => {
+    expect(simplifyPaint(video)).toEqual({
+      type: 'VIDEO',
+      scaleMode: 'CROP',
+      videoHash: 'video-a',
+      videoTransform,
+    });
+  });
+
+  it('keeps VIDEO hashes and crops in globalVars and never dedupes different assets or crops together', () => {
+    const paints = [
+      video,
+      { ...video, videoHash: 'video-b' },
+      {
+        ...video,
+        videoTransform: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+      },
+    ];
+    const { nodes, globalVars } = dedupeStyles(
+      paints.map((paint, i) => ({
+        id: String(i),
+        name: 'Video',
+        type: 'RECTANGLE',
+        fills: [paint],
+      })),
+    );
+    expect(new Set(nodes.map(node => node.fill)).size).toBe(3);
+    expect(nodes.map(node => globalVars.styles[node.fill!])).toEqual(
+      paints.map(paint => [
+        {
+          type: 'VIDEO',
+          scaleMode: paint.scaleMode,
+          videoHash: paint.videoHash,
+          videoTransform: paint.videoTransform,
+        },
+      ]),
+    );
+  });
+
+  it('leaves non-VIDEO simplified output unchanged even with stray VIDEO fields', () => {
+    expect(
+      simplifyPaint({
+        ...video,
+        type: 'IMAGE',
+        imageTransform: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+      }),
+    ).toEqual({
+      type: 'IMAGE',
+      scaleMode: 'CROP',
+      imageTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+    });
+  });
 });

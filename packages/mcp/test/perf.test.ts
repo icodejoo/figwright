@@ -30,7 +30,22 @@ it('records total wall time and failure, excludes stats, preserves results', asy
   ).rejects.toThrow('original');
   await observeTool('get_perf_stats', async () => ({}));
   expect(serverPerfStats({ tool: 'read' })).toEqual([
-    { tool: 'read', startedAt: 100, totalMs: 30, success: true },
+    { tool: 'read', requestId: null, startedAt: 100, totalMs: 30, success: true },
   ]);
   expect(serverPerfStats({})[0]).toMatchObject({ tool: 'fail', success: false });
+});
+
+it('correlates concurrent dispatches and suppresses duplicate parent totals', async () => {
+  configureServerPerf(true);
+  await observeTool('parent', async () =>
+    Promise.all([
+      observeTool('get_node', async () => ({}), 'bridge-a'),
+      observeTool('get_node', async () => ({}), 'bridge-b'),
+    ]),
+  );
+  expect(
+    serverPerfStats({})
+      .map(row => row.requestId)
+      .toSorted(),
+  ).toEqual(['bridge-a', 'bridge-b']);
 });

@@ -448,3 +448,64 @@ describe('restoreText on text set along a path', () => {
     expect(t.setRangeFontName).toHaveBeenCalled();
   });
 });
+
+describe('rollback layout lookup cache', () => {
+  const box = (id: string) => {
+    const node = {
+      id,
+      parent: null,
+      type: 'RECTANGLE',
+      removed: false,
+      width: 100,
+      height: 40,
+      relativeTransform: [
+        [1, 0, 5],
+        [0, 1, 6],
+      ],
+      resizeWithoutConstraints: vi.fn<(w: number, h: number) => void>((w, h) => {
+        node.width = w;
+        node.height = h;
+      }),
+    };
+    return node;
+  };
+  it('reduces repeated lookups from ops × nodes to nodes while restoring every drift each time', async () => {
+    for (const cached of [false, true]) {
+      const nodes = Array.from({ length: 20 }, (_, i) => box(String(i)));
+      const scope = nodes.map(node => captureGeometry(node as unknown as SceneNode));
+      const lookup = vi.fn<(id: string) => Promise<unknown>>(
+        async id => nodes.find(node => node.id === id) ?? null,
+      );
+      const api = { getNodeByIdAsync: lookup } as unknown as typeof figma;
+      const cache = cached ? new Map<string, BaseNode>() : undefined;
+      for (let op = 0; op < 5; op++) {
+        for (const node of nodes) node.width = 1;
+        await restoreLayoutDrift(api, scope, cache);
+        expect(nodes.map(node => node.width)).toEqual(Array.from({ length: 20 }, () => 100));
+      }
+      expect(lookup).toHaveBeenCalledTimes(cached ? 20 : 100);
+      for (const node of nodes) expect(node.resizeWithoutConstraints).toHaveBeenCalledTimes(5);
+    }
+  });
+  it('rechecks missing, removed and rejected lookups', async () => {
+    const old = box('x');
+    const fresh = box('x');
+    const snap = [captureGeometry(old as unknown as SceneNode)];
+    const lookup = vi
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('native error'))
+      .mockResolvedValueOnce(old)
+      .mockResolvedValueOnce(fresh);
+    const api = { getNodeByIdAsync: lookup } as unknown as typeof figma;
+    const cache = new Map<string, BaseNode>();
+    await restoreLayoutDrift(api, snap, cache);
+    await expect(restoreLayoutDrift(api, snap, cache)).rejects.toThrow('native error');
+    await restoreLayoutDrift(api, snap, cache);
+    old.removed = true;
+    fresh.width = 1;
+    await restoreLayoutDrift(api, snap, cache);
+    expect(fresh.width).toBe(100);
+    expect(lookup).toHaveBeenCalledTimes(4);
+  });
+});

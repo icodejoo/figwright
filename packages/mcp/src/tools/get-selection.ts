@@ -7,11 +7,17 @@ export const GET_SELECTION_TOOL_NAME = 'get_selection';
 export const getSelectionTool: ToolSpec = {
   name: GET_SELECTION_TOOL_NAME,
   description:
+    'brief=true returns only id, name, type, parentId, visible for locating nodes; default false preserves full fields. Use get_node / get_design_context for styled details. ' +
     'Return the current selection on the active Figma page: { pageId, pageName, nodes }, where ' +
     'each node is a full flat serialization — geometry, fills/strokes/effects, text properties, ' +
     'style/variable ids, mainComponent — without children. The zero-argument "what is the user ' +
     'looking at" call: use it to identify the selected node ids (and page), then walk deeper with ' +
     'get_design_context or get_node. An empty nodes array means nothing is selected.',
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    brief: z
+      .boolean()
+      .optional()
+      .describe('Return only basic identity and visibility; default false'),
+  }),
   kind: 'read',
 };

@@ -8,6 +8,8 @@ export const SET_FILLS_TOOL_NAME = 'set_fills';
 export const setFillsTool: ToolSpec = {
   name: SET_FILLS_TOOL_NAME,
   description:
+    'VIDEO accepts an existing videoHash returned by get_node / get_design_context, scaleMode (default FILL), videoTransform (CROP), scalingFactor, rotation and filters. No video upload is performed. ' +
+    'SHADER accepts shaderId already imported into the file and shaderProperties:[{id,value}] keyed by property-definition id; read metadata is ignored. This tool does not import shaders or create shader programs; Figma errors for unloaded ids pass through. ' +
     "Set a node's fills. SOLID: { type:'SOLID', color:{r,g,b} } (0–1). Gradient: " +
     "{ type:'GRADIENT_LINEAR'|…, gradientStops:[{position,color:{r,g,b,a}}], gradientTransform } " +
     '(round-trips get_node output). A SOLID paint may carry boundVariables ({ color: variableId }) ' +

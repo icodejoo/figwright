@@ -1,5 +1,112 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`HEAD complex-tree evidence > pins all default/brief fields, brief=false 1`] = `
+{
+  "nodes": [
+    {
+      "height": 10,
+      "id": "1:2",
+      "locked": false,
+      "mainComponent": {
+        "id": "9:1",
+        "key": "card-key",
+        "name": "Card",
+      },
+      "name": "Card instance",
+      "parentId": "0:1",
+      "type": "INSTANCE",
+      "visible": true,
+      "width": 10,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "height": 10,
+      "id": "I1:2;3:4",
+      "locked": true,
+      "name": "Nested instance layer",
+      "parentId": "1:2",
+      "type": "FRAME",
+      "visible": true,
+      "width": 10,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "characters": undefined,
+      "fontName": "mixed",
+      "fontSize": "mixed",
+      "height": 10,
+      "id": "I1:2;3:4;5:6",
+      "letterSpacing": "mixed",
+      "lineHeight": "mixed",
+      "locked": false,
+      "maxLines": undefined,
+      "name": "Nested label",
+      "parentId": "I1:2;3:4",
+      "textAlignHorizontal": undefined,
+      "textAlignVertical": undefined,
+      "textAutoResize": undefined,
+      "textCase": "mixed",
+      "textDecoration": "mixed",
+      "textTruncation": undefined,
+      "type": "TEXT",
+      "visible": true,
+      "width": 10,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "height": 10,
+      "id": "2:1",
+      "locked": true,
+      "name": "Hidden locked",
+      "parentId": "0:1",
+      "type": "RECTANGLE",
+      "visible": false,
+      "width": 10,
+      "x": 0,
+      "y": 0,
+    },
+  ],
+}
+`;
+
+exports[`HEAD complex-tree evidence > pins all default/brief fields, brief=true 1`] = `
+{
+  "nodes": [
+    {
+      "id": "1:2",
+      "name": "Card instance",
+      "parentId": "0:1",
+      "type": "INSTANCE",
+      "visible": true,
+    },
+    {
+      "id": "I1:2;3:4",
+      "name": "Nested instance layer",
+      "parentId": "1:2",
+      "type": "FRAME",
+      "visible": true,
+    },
+    {
+      "id": "I1:2;3:4;5:6",
+      "name": "Nested label",
+      "parentId": "I1:2;3:4",
+      "type": "TEXT",
+      "visible": true,
+    },
+    {
+      "id": "2:1",
+      "name": "Hidden locked",
+      "parentId": "0:1",
+      "type": "RECTANGLE",
+      "visible": false,
+    },
+  ],
+}
+`;
+
 exports[`search_nodes handler > preserves the legacy default result field for field 1`] = `
 {
   "nodes": [

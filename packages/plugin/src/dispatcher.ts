@@ -57,7 +57,7 @@ export const dispatchSandboxMessage = async (input: DispatchInput): Promise<Disp
   try {
     if (call) {
       call.startedAt = Date.now();
-      call.queueMs = call.startedAt - call.arrivedAt;
+      call.dispatchOverheadMs = call.startedAt - call.arrivedAt;
     }
     const result = await handler(params);
     if (call) {
