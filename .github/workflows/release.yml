@@ -1,12 +1,19 @@
 name: Release
 
-# Triggered by the tag that `pnpm release` (changelogen --release) creates and
-# you push. Builds, gates, publishes @figwright/mcp to npm with provenance via
-# OIDC trusted publishing, creates the GitHub Release from the changelog, and
-# attaches the Figma plugin as a downloadable asset.
+# Builds, gates, packs an installer zip (MCP server + Figma plugin + install guide) and
+# publishes it as a GitHub Release on this repository. Nothing is published to npm.
+#
+# Trigger it by pushing a tag (`git tag v0.8.0-fork.1 && git push origin v0.8.0-fork.1`), or run it
+# by hand from the Actions tab and give a tag name; the tag is created on the run's commit.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create, for example v0.8.0-fork.1
+        required: true
+        type: string
 
 permissions: {}
 
@@ -17,49 +24,89 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
-      contents: write # GitHub Release + plugin asset upload
-      id-token: write # OIDC: npm trusted publishing + provenance
+      contents: write # create the Release and upload the zip
+    env:
+      # A tag push names its own tag; a manual run takes it from the input.
+      TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # full history so changelogen can diff from the last tag
-          # Release steps talk to GitHub via the API tokens below, never git push.
+          # Release steps talk to GitHub through the token below, never git push.
           persist-credentials: false
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
-      # No pnpm cache here: this workflow publishes to npm, and restoring a
-      # shared cache into a publish job is a cache-poisoning vector.
+      # No pnpm cache: this job publishes artifacts, and restoring a shared cache into a
+      # publishing job is a cache-poisoning vector.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           package-manager-cache: false
-          registry-url: 'https://registry.npmjs.org'
 
       - run: pnpm install --frozen-lockfile
 
-      # Gate before the irreversible publish. `pnpm build` also builds the
-      # plugin (dist/code.js + dist/index.html) packaged as an asset below.
+      # Gate before anything is published. `pnpm build` also builds the plugin.
       - run: pnpm build
       - run: pnpm test
 
-      # Publish @figwright/mcp. `pnpm pack` resolves workspace:* into a clean
-      # tarball; `npm publish` does OIDC trusted publishing (no token) + provenance.
-      - run: pnpm -C packages/mcp pack
-      - run: npm publish packages/mcp/figwright-mcp-*.tgz --provenance --access public
-
-      # Create the GitHub Release from the changelog (after npm succeeds).
-      - run: pnpm -C packages/mcp exec changelogen gh release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Attach the Figma plugin (manifest + built UI/sandbox) so users can
-      # "Import plugin from manifest" in Figma dev mode until it's on Community.
-      - name: Package & upload the Figma plugin
-        working-directory: packages/plugin
+      # `pnpm pack` resolves workspace:* into a clean package folder: dist/, package.json with
+      # real dependency ranges. The installer ships it so the user only runs `npm install`.
+      - name: Assemble the installer
         run: |
-          zip -r "$RUNNER_TEMP/figwright-plugin-${GITHUB_REF_NAME}.zip" manifest.json dist
-          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/figwright-plugin-${GITHUB_REF_NAME}.zip" --clobber
+          set -euo pipefail
+          out="$RUNNER_TEMP/figwright"
+          rm -rf "$out"
+          mkdir -p "$out/mcp" "$out/plugin"
+
+          pnpm -C packages/mcp pack --pack-destination "$RUNNER_TEMP"
+          (cd "$RUNNER_TEMP" && tar -xzf figwright-mcp-*.tgz)
+          cp -R "$RUNNER_TEMP/package/." "$out/mcp/"
+
+          cp packages/plugin/manifest.json "$out/plugin/"
+          cp -R packages/plugin/dist "$out/plugin/dist"
+
+          cp scripts/installer/INSTALL.md "$out/INSTALL.md"
+          sed -i "s/{{TAG}}/${TAG}/g" "$out/INSTALL.md"
+
+          cd "$RUNNER_TEMP"
+          zip -r "figwright-${TAG}.zip" figwright
+          cp "figwright-${TAG}.zip" figwright-installer.zip
+
+      # Create the Release (or update it on a re-run). The body carries the download links;
+      # GitHub appends the generated change list after it.
+      - name: Publish the Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/${REPO}/releases"
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          ## 下载 / Download
+
+          - 安装包 / Installer: [figwright-${TAG}.zip](${base}/download/${TAG}/figwright-${TAG}.zip)
+          - 始终指向最新版 / Always the latest: [figwright-installer.zip](${base}/latest/download/figwright-installer.zip)
+
+          \`\`\`
+          ${base}/download/${TAG}/figwright-${TAG}.zip
+          ${base}/latest/download/figwright-installer.zip
+          \`\`\`
+
+          压缩包内有 \`mcp/\`（MCP 服务端）、\`plugin/\`（Figma 插件）和 \`INSTALL.md\`（安装步骤）。
+          The zip holds \`mcp/\` (the MCP server), \`plugin/\` (the Figma plugin) and \`INSTALL.md\` (install steps).
+          EOF
+
+          assets=("$RUNNER_TEMP/figwright-${TAG}.zip" "$RUNNER_TEMP/figwright-installer.zip")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+            gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "$TAG" "${assets[@]}" \
+              --title "$TAG" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              --generate-notes \
+              --target "$SHA"
+          fi
