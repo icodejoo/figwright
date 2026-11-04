@@ -55,6 +55,7 @@ import { exportVideoTool } from './export-video.js';
 import { findReplaceTextTool } from './find-replace-text.js';
 import { flattenNodesTool } from './flatten-nodes.js';
 import { flipNodesTool } from './flip-nodes.js';
+import { focusFileTool } from './focus-file.js';
 import { getAnnotationsTool } from './get-annotations.js';
 import { getComponentApiTool } from './get-component-api.js';
 import { getComponentInstancesTool } from './get-component-instances.js';
@@ -62,6 +63,7 @@ import { getDesignContextTool } from './get-design-context.js';
 import { getDocumentTool } from './get-document.js';
 import { getExportSettingsTool } from './get-export-settings.js';
 import { getFontsTool } from './get-fonts.js';
+import { getInstanceMainsTool } from './get-instance-mains.js';
 import { getLocalComponentsTool } from './get-local-components.js';
 import { getMetadataTool } from './get-metadata.js';
 import { getMotionContextTool } from './get-motion-context.js';
@@ -86,6 +88,7 @@ import { importImageTool } from './import-image.js';
 import { importStyleTool } from './import-style.js';
 import { importSvgTool } from './import-svg.js';
 import { importVariableTool } from './import-variable.js';
+import { listChildrenTool } from './list-children.js';
 import { listFilesTool } from './list-files.js';
 import { listTeamLibraryTool } from './list-team-library.js';
 import { lockNodesTool } from './lock-nodes.js';
@@ -175,6 +178,9 @@ import { useFileTool } from './use-file.js';
  */
 const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   // Reads
+  getInstanceMainsTool,
+  listChildrenTool,
+  focusFileTool,
   pingTool,
   getSelectionTool,
   getDocumentTool,

@@ -20,6 +20,28 @@ const megabytes = (bytes: number): string => (bytes / 1024 / 1024).toFixed(1);
 /** Bytes `text` occupies as a JSON string inside the JSON-RPC line: escaped, then UTF-8. */
 const wireBytes = (text: string): number => Buffer.byteLength(JSON.stringify(text), 'utf8') - 2;
 
+/** Preserve scan aggregates while trimming only instance mapping rows. */
+export const fitInstanceMains = <T extends { instances: unknown[] }>(
+  result: T,
+  budgetBytes = NODE_LIST_BUDGET_BYTES,
+): T & { truncated?: boolean } => {
+  if (wireBytes(JSON.stringify(result)) <= budgetBytes) return result;
+  const shell = {
+    ...result,
+    instances: [] as unknown[],
+    truncated: true,
+    note: 'Instance rows trimmed to fit the result budget; aggregates describe the scanned scope. Narrow root or nameContains for omitted rows.',
+  };
+  let used = wireBytes(JSON.stringify(shell));
+  for (const row of result.instances) {
+    const size = wireBytes(JSON.stringify(row)) + (shell.instances.length ? 1 : 0);
+    if (used + size > budgetBytes) break;
+    shell.instances.push(row);
+    used += size;
+  }
+  return shell;
+};
+
 /** Keep the most frequent variables; counts in retained rows remain exact for the scanned scope. */
 export const fitVariableBindings = <T extends { bindings: { count: number }[] }>(
   result: T,

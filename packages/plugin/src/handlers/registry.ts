@@ -56,6 +56,7 @@ import { createGetDesignContextHandler } from './get-design-context.js';
 import { createGetDocumentHandler } from './get-document.js';
 import { createGetExportSettingsHandler } from './get-export-settings.js';
 import { createGetFontsHandler } from './get-fonts.js';
+import { createGetInstanceMainsHandler } from './get-instance-mains.js';
 import { createGetLocalComponentsHandler } from './get-local-components.js';
 import { createGetMetadataHandler } from './get-metadata.js';
 import { createGetMotionContextHandler } from './get-motion-context.js';
@@ -78,6 +79,7 @@ import { createImportImageHandler } from './import-image.js';
 import { createImportStyleHandler } from './import-style.js';
 import { createImportSvgHandler } from './import-svg.js';
 import { createImportVariableHandler } from './import-variable.js';
+import { createListChildrenHandler } from './list-children.js';
 import { createListFilesHandler } from './list-files.js';
 import { createListTeamLibraryHandler } from './list-team-library.js';
 import { createLoadPageHandler } from './load-page.js';
@@ -300,6 +302,8 @@ export const createSandboxHandlers = (
     load_page: createLoadPageHandler(figmaCtx),
     get_publish_status: createGetPublishStatusHandler(figmaCtx),
     list_team_library: createListTeamLibraryHandler(figmaCtx),
+    get_instance_mains: createGetInstanceMainsHandler(figmaCtx),
+    list_children: createListChildrenHandler(figmaCtx),
     scan_variable_bindings: createScanVariableBindingsHandler(figmaCtx),
     get_component_instances: createGetComponentInstancesHandler(figmaCtx),
     get_style_consumers: createGetStyleConsumersHandler(figmaCtx),

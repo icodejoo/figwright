@@ -20,6 +20,8 @@ export interface ToolSpec {
    */
   inputSchema: z.ZodObject;
   kind: ToolKind;
+  /** Runs only on the server, including read tools that have no sandbox handler. */
+  serverOnly?: true;
   /**
    * Marks a write that irreversibly destroys user data (a delete, ungrouping, clearing reactions,
    * severing an instance from its component) — drives the MCP `destructiveHint` annotation. Lives

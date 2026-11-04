@@ -37,6 +37,7 @@ import { handleDesignContext } from './tools/design-context-guard.js';
 import { DESIGN_DIFF_TOOL_NAME, handleDesignDiff } from './tools/design-diff.js';
 import { EXPORT_PDF_TOOL_NAME, handleExportPdf } from './tools/export-pdf.js';
 import { EXPORT_VIDEO_TOOL_NAME, handleExportVideo } from './tools/export-video.js';
+import { handleFocusFile } from './tools/focus-file.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './tools/get-design-context.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
@@ -53,6 +54,7 @@ import { ALL_TOOL_SPECS } from './tools/registry.js';
 import {
   assertWithinLimit,
   fitLibraryResult,
+  fitInstanceMains,
   fitNodeList,
   fitVariableBindings,
 } from './tools/result-budget.js';
@@ -155,6 +157,16 @@ const nodeListHandler =
 // server-local tools read the filesystem (some reusing dispatch), and get_screenshot returns an
 // image content block. Everything else takes the generic dispatch path below.
 const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
+  focus_file: async args =>
+    textResult(
+      await handleFocusFile(args, {
+        list: async () => handleListFiles(await listSessions(), dispatchToSession),
+      }),
+    ),
+  get_instance_mains: async args =>
+    textResult(
+      fitInstanceMains((await dispatch('get_instance_mains', args)) as { instances: unknown[] }),
+    ),
   scan_variable_bindings: async args =>
     textResult(
       fitVariableBindings(

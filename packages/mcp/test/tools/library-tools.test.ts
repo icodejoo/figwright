@@ -5,8 +5,8 @@ import { ALL_TOOL_SPECS } from '../../src/tools/registry.js';
 import { fitLibraryResult } from '../../src/tools/result-budget.js';
 const spec = (name: string) => ALL_TOOL_SPECS.find(t => t.name === name)!;
 describe('library tools', () => {
-  it('advertises 162 tools and keeps the plugin floor and budgets', () => {
-    expect(ALL_TOOL_SPECS).toHaveLength(162);
+  it('advertises 165 tools and keeps the plugin floor and budgets', () => {
+    expect(ALL_TOOL_SPECS).toHaveLength(165);
     expect(MIN_PLUGIN_VERSION).toBe('0.8.0');
     expect(getToolBudget('get_publish_status')).toBe(120000);
     expect(getToolBudget('bind_variables_by_value')).toBe(120000);

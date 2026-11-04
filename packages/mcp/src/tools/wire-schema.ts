@@ -33,6 +33,7 @@ export const wireToolSchema = (spec: ToolSpec): z.ZodObject | null => {
   // records and validates those arguments. A read/write tool always dispatches under its own name;
   // its `serverOnlyArgs` (if any) are resolved by the server before dispatch (`import_image`'s
   // `path` becomes `data`), so they are removed here exactly as a local tool's are.
+  if (spec.serverOnly) return null;
   if (spec.kind === 'local' && (spec.serverOnlyArgs === null || spec.serverOnlyArgs === undefined))
     return null;
   const serverOnly: readonly string[] = spec.serverOnlyArgs ?? [];

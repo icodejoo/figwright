@@ -34,6 +34,7 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   // Explicit sequential page preloading may outlive the ordinary read budget.
   'load_page',
   'scan_variable_bindings',
+  'get_instance_mains',
   'get_publish_status',
   'bind_variables_by_value',
   'rebind_variables',

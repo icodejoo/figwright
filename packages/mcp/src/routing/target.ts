@@ -207,7 +207,9 @@ export const resolveFileTarget = async (
   } = wait;
   let matches = sessions.filter(s => s.fileName === bound);
   for (let waited = 0; matches.length === 0 && waited < waitMs; waited += stepMs) {
+    // eslint-disable-next-line no-await-in-loop -- sequential polling: each probe must follow the sleep
     await sleep(stepMs);
+    // eslint-disable-next-line no-await-in-loop -- sequential polling
     sessions = await probeSessions();
     if (sessions.some(s => s.id === target?.sessionId)) return target.sessionId;
     matches = sessions.filter(s => s.fileName === bound);
