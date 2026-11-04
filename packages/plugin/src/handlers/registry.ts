@@ -79,6 +79,7 @@ import { createImportImageHandler } from './import-image.js';
 import { createImportStyleHandler } from './import-style.js';
 import { createImportSvgHandler } from './import-svg.js';
 import { createImportVariableHandler } from './import-variable.js';
+import { createLayoutToolsHandler } from './layout-tools.js';
 import { createListChildrenHandler } from './list-children.js';
 import { createListFilesHandler } from './list-files.js';
 import { createListTeamLibraryHandler } from './list-team-library.js';
@@ -173,6 +174,9 @@ export const createSandboxHandlers = (
   const figmaCtx = withInstanceIdLookup(figmaApi, lookupState);
 
   const rawWrites: SandboxHandlers = {
+    audit_layout: createLayoutToolsHandler(figmaCtx, 'audit_layout'),
+    relayout_frames: createLayoutToolsHandler(figmaCtx, 'relayout_frames'),
+    flatten_stage: createLayoutToolsHandler(figmaCtx, 'flatten_stage'),
     set_fills: createSetFillsHandler(figmaCtx),
     set_text: createSetTextHandler(figmaCtx),
     set_text_properties: createSetTextPropertiesHandler(figmaCtx),

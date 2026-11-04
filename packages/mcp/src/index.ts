@@ -47,6 +47,7 @@ import {
   resolveBatchImagePaths,
   resolveImagePath,
 } from './tools/import-image.js';
+import { handleLayoutTool } from './tools/layout-tools.js';
 import { handleListFiles, LIST_FILES_TOOL_NAME } from './tools/list-files.js';
 import { captureNotices, withRoutingNotice, withSkewNotice } from './tools/notices.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
@@ -157,6 +158,12 @@ const nodeListHandler =
 // server-local tools read the filesystem (some reusing dispatch), and get_screenshot returns an
 // image content block. Everything else takes the generic dispatch path below.
 const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
+  flatten_stage: async args =>
+    textResult(await handleLayoutTool(await routedDispatch(), 'flatten_stage', args)),
+  audit_layout: async args =>
+    textResult(await handleLayoutTool(await routedDispatch(), 'audit_layout', args)),
+  relayout_frames: async args =>
+    textResult(await handleLayoutTool(await routedDispatch(), 'relayout_frames', args)),
   focus_file: async args =>
     textResult(
       await handleFocusFile(args, {

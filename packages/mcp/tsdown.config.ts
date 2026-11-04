@@ -19,7 +19,7 @@ export default defineConfig({
   },
   fixedExtension: true,
   publint: true,
-  deps: { alwaysBundle: ['@figwright/shared'] },
+  deps: { alwaysBundle: ['@figwright/shared', 'maxrects-packer'] },
   outputOptions: {
     banner: '#!/usr/bin/env node',
   },

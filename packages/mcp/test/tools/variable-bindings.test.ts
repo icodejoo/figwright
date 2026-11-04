@@ -5,8 +5,8 @@ import { ALL_TOOL_SPECS } from '../../src/tools/registry.js';
 import { fitVariableBindings } from '../../src/tools/result-budget.js';
 
 describe('variable binding tool contracts', () => {
-  it('registers 165 tools, with heavy budgets and safe defaults', () => {
-    expect(ALL_TOOL_SPECS).toHaveLength(165);
+  it('registers 168 tools, with heavy budgets and safe defaults', () => {
+    expect(ALL_TOOL_SPECS).toHaveLength(168);
     for (const name of ['scan_variable_bindings', 'rebind_variables'])
       expect(getToolBudget(name)).toBe(120_000);
     const spec = ALL_TOOL_SPECS.find(tool => tool.name === 'rebind_variables')!;

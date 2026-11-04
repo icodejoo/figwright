@@ -2423,6 +2423,9 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
  * either side without someone deciding which, and saying why when it is this one.
  */
 export const NON_BATCHABLE: Readonly<Record<string, string>> = {
+  audit_layout: '逐轮修复依赖服务端调度，不能作为原子操作；请单独调用并保存 rollback',
+  relayout_frames: '逐容器装箱依赖服务端调度，不能作为原子操作；请单独调用并保存 rollback',
+  flatten_stage: '拍平和装箱依赖服务端调度，不能作为原子操作；请单独调用并保存 rollback',
   bind_variables_by_value:
     'subtree value binding has no per-operation inverse or atomic rollback; call separately with dryRun first',
   rebind_variables:

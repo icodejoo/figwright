@@ -88,6 +88,7 @@ import { importImageTool } from './import-image.js';
 import { importStyleTool } from './import-style.js';
 import { importSvgTool } from './import-svg.js';
 import { importVariableTool } from './import-variable.js';
+import { auditLayoutTool, flattenStageTool, relayoutFramesTool } from './layout-tools.js';
 import { listChildrenTool } from './list-children.js';
 import { listFilesTool } from './list-files.js';
 import { listTeamLibraryTool } from './list-team-library.js';
@@ -180,6 +181,9 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   // Reads
   getInstanceMainsTool,
   listChildrenTool,
+  auditLayoutTool,
+  relayoutFramesTool,
+  flattenStageTool,
   focusFileTool,
   pingTool,
   getSelectionTool,
