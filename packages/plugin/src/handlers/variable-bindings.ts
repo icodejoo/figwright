@@ -148,13 +148,21 @@ export const visitBindings = async (
   roots: readonly SceneNode[],
   deadline: number,
   now: () => number,
-  visit: (node: SceneNode, overrides?: Map<string, readonly string[]>) => Promise<void>,
+  visit: (
+    node: SceneNode,
+    overrides?: Map<string, readonly string[]>,
+    additional?: boolean,
+  ) => Promise<void>,
   includeInstanceSublayers?: boolean,
+  additionalRoot?: (node: SceneNode) => Promise<SceneNode | undefined>,
 ) =>
   measureStage(perfFor(api), 'traversalMs', async () => {
-    const stack = roots
-      .toReversed()
-      .map(node => ({ node, overrides: undefined as Map<string, readonly string[]> | undefined }));
+    const stack = roots.toReversed().map(node => ({
+      node,
+      overrides: undefined as Map<string, readonly string[]> | undefined,
+      additional: false,
+    }));
+    const seen = new Set<string>();
     let skippedInstances = 0;
     const slice = new TimeSlice(perfFor(api));
     let visited = 0;
@@ -169,6 +177,10 @@ export const visitBindings = async (
       const node = entry.node;
       try {
         if (node.removed) continue;
+        if (additionalRoot) {
+          if (seen.has(node.id)) continue;
+          seen.add(node.id);
+        }
         const overrides =
           includeInstanceSublayers === undefined
             ? undefined
@@ -176,7 +188,7 @@ export const visitBindings = async (
               outerOverrides(node) ??
               (node.id.startsWith('I') ? new Map<string, readonly string[]>() : undefined));
         // eslint-disable-next-line no-await-in-loop -- bounded per-node native reads/writes
-        await visit(node, overrides);
+        await visit(node, overrides, entry.additional);
         visited += 1;
         if (node.removed) continue;
         if (includeInstanceSublayers === false && node.type === 'INSTANCE') skippedInstances++;
@@ -184,7 +196,13 @@ export const visitBindings = async (
           const children = childrenOf(node);
           if (children)
             for (let i = children.length - 1; i >= 0; i -= 1)
-              stack.push({ node: children[i]!, overrides });
+              stack.push({ node: children[i]!, overrides, additional: entry.additional });
+        }
+        if (additionalRoot) {
+          // eslint-disable-next-line no-await-in-loop -- discover roots within the same budget and cooperative traversal
+          const extra = await additionalRoot(node);
+          if (extra && !seen.has(extra.id))
+            stack.push({ node: extra, overrides: undefined, additional: true });
         }
       } catch {
         // Nodes may be removed by the user during a cooperative host handoff.
@@ -195,7 +213,7 @@ export const visitBindings = async (
     }
     return {
       visited,
-      complete: true,
+      complete: additionalRoot ? now() < deadline : true,
       ...(includeInstanceSublayers !== undefined && { skippedInstances }),
     };
   });

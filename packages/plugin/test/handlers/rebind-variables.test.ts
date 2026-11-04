@@ -1,9 +1,261 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { TimeSlice } from '../../src/cooperative.js';
 import { createRebindVariablesHandler } from '../../src/handlers/rebind-variables.js';
 import { alias, fixture, gradient, solid } from './variable-bindings-fixture.js';
 
 const mapping = [{ from: 'old', to: 'new' }];
+const orphanFixture = () => {
+  const f = fixture();
+  const main = Object.assign(f.makeNode('main'), {
+    type: 'COMPONENT',
+    parent: null,
+    removed: false,
+    children: [Object.assign(f.makeNode('main-child'), { parent: null })],
+  });
+  Object.assign(main.children[0]!, { parent: main });
+  const getMainComponentAsync = vi.fn<() => Promise<typeof main | null>>(async () => main);
+  const instance = Object.assign(f.makeNode('instance', []), {
+    type: 'INSTANCE',
+    parent: null,
+    overrides: [],
+    getMainComponentAsync,
+    children: [] as ReturnType<typeof f.makeNode>[],
+  });
+  f.page.children.splice(0, f.page.children.length, instance);
+  return { ...f, main, instance, getMainComponentAsync };
+};
+
+describe('rebind_variables orphan mains', () => {
+  it.each([false, true])(
+    'rewrites a parentless main subtree with instance sublayers=%s and resumes idempotently',
+    async includeInstanceSublayers => {
+      const f = orphanFixture();
+      const handler = createRebindVariablesHandler(f.api);
+      const args = { mapping, includeOrphanMains: true, includeInstanceSublayers, dryRun: false };
+      expect(await handler(args)).toMatchObject({
+        complete: true,
+        visited: 3,
+        matched: { fills: 2 },
+        changed: { fills: 2 },
+        orphanMains: { visited: 2, count: 1, samples: ['main'] },
+      });
+      expect(f.main.fills).toEqual([solid('new')]);
+      expect(f.main.children[0]!.fills).toEqual([solid('new')]);
+      expect(await handler(args)).toMatchObject({ matched: { fills: 0 }, changed: { fills: 0 } });
+      expect(f.writes).toHaveBeenCalledTimes(2);
+    },
+  );
+  it('does not query main components by default, even when traversing instance sublayers', async () => {
+    const f = orphanFixture();
+    for (const includeInstanceSublayers of [false, true])
+      expect(
+        await createRebindVariablesHandler(f.api)({
+          mapping,
+          includeInstanceSublayers,
+          dryRun: false,
+        }),
+      ).toMatchObject({
+        orphanMains: { visited: 0, count: 0, samples: [] },
+      });
+    expect(f.getMainComponentAsync).not.toHaveBeenCalled();
+    expect(f.writes).not.toHaveBeenCalled();
+  });
+  it('does not add an attached main as an extra root or process it twice', async () => {
+    const f = orphanFixture();
+    Object.assign(f.main, { parent: f.page });
+    f.page.children.push(f.main);
+    expect(
+      await createRebindVariablesHandler(f.api)({
+        mapping,
+        includeOrphanMains: true,
+        dryRun: false,
+      }),
+    ).toMatchObject({
+      visited: 3,
+      changed: { fills: 2 },
+      orphanMains: { visited: 0, count: 0 },
+    });
+    expect(f.getMainComponentAsync).toHaveBeenCalledTimes(1);
+    expect(f.writes).toHaveBeenCalledTimes(2);
+  });
+  it('deduplicates shared main references in dryRun and performs zero writes', async () => {
+    const f = orphanFixture();
+    f.page.children.push({ ...f.instance, id: 'instance-2' });
+    expect(
+      await createRebindVariablesHandler(f.api)({ mapping, includeOrphanMains: true }),
+    ).toMatchObject({
+      visited: 4,
+      matched: { fills: 2 },
+      changed: { fills: 0 },
+      perMapping: [{ count: 2 }],
+      orphanMains: { visited: 2, count: 1, samples: ['main'] },
+    });
+    expect(f.getMainComponentAsync).toHaveBeenCalledTimes(2);
+    expect(f.bind).not.toHaveBeenCalled();
+    expect(f.writes).not.toHaveBeenCalled();
+  });
+  it('writes a shared main only once and bounds the main id samples', async () => {
+    const f = orphanFixture();
+    f.page.children.push({ ...f.instance, id: 'instance-2' });
+    for (let i = 0; i < 6; i++) {
+      const main = Object.assign(f.makeNode(`main-${i}`), { parent: null });
+      f.page.children.push(
+        Object.assign(
+          { ...f.instance, id: `instance-${i + 3}` },
+          { getMainComponentAsync: vi.fn<() => Promise<typeof main>>(async () => main) },
+        ),
+      );
+    }
+    expect(
+      await createRebindVariablesHandler(f.api)({
+        mapping,
+        includeOrphanMains: true,
+        dryRun: false,
+      }),
+    ).toMatchObject({
+      matched: { fills: 8 },
+      changed: { fills: 8 },
+      orphanMains: {
+        visited: 8,
+        count: 7,
+        samples: ['main', 'main-0', 'main-1', 'main-2', 'main-3'],
+      },
+    });
+    expect(f.writes.mock.calls.filter(([id]) => id === 'main')).toHaveLength(1);
+  });
+  it.each([null, 'removed'])('ignores an unavailable main: %s', async state => {
+    const f = orphanFixture();
+    if (state === 'removed') f.main.removed = true;
+    else f.getMainComponentAsync.mockResolvedValue(null);
+    expect(
+      await createRebindVariablesHandler(f.api)({
+        mapping,
+        includeOrphanMains: true,
+        dryRun: false,
+      }),
+    ).toMatchObject({
+      complete: true,
+      orphanMains: { count: 0, visited: 0 },
+      changed: { fills: 0 },
+    });
+    expect(f.writes).not.toHaveBeenCalled();
+  });
+  it('preserves styles and selected fields on extra roots', async () => {
+    const f = orphanFixture();
+    Object.assign(f.main, { fillStyleId: 'style' });
+    f.main.children[0]!.boundVariables = { paddingLeft: alias('float') };
+    const result = await createRebindVariablesHandler(f.api)({
+      mapping: [...mapping, { from: 'float', to: 'floatNew' }],
+      includeOrphanMains: true,
+      fields: ['fills'],
+      dryRun: false,
+    });
+    expect(result).toMatchObject({ skippedStyled: 1, changed: { fills: 1, scalars: 0 } });
+    expect(f.main.fills).toEqual([solid()]);
+    expect(f.main.children[0]!.boundVariables).toEqual({ paddingLeft: alias('float') });
+  });
+  it.each([false, true])(
+    'obeys nested instance boundaries inside orphan mains, sublayers=%s',
+    async includeInstanceSublayers => {
+      const f = orphanFixture();
+      const child = f.main.children[0]!;
+      const leaf = f.makeNode('Inested;leaf');
+      Object.assign(child, {
+        type: 'INSTANCE',
+        children: [leaf],
+        getMainComponentAsync: vi.fn<() => Promise<typeof f.main>>(async () => f.main),
+        overrides: [{ id: leaf.id, overriddenFields: ['fills'] }],
+      });
+      Object.assign(leaf, { parent: child });
+      expect(
+        await createRebindVariablesHandler(f.api)({
+          mapping,
+          includeOrphanMains: true,
+          includeInstanceSublayers,
+          dryRun: false,
+        }),
+      ).toMatchObject({
+        complete: true,
+        changed: { fills: includeInstanceSublayers ? 2 : 1 },
+        skippedInherited: 1,
+        orphanMains: { count: 1, visited: includeInstanceSublayers ? 3 : 2 },
+      });
+      expect(child.fills).toEqual([solid()]);
+    },
+  );
+  it('retains prior writes and stops before a main discovered after budget exhaustion', async () => {
+    const f = orphanFixture();
+    f.page.children.unshift(f.nodes[0]!);
+    let clock = 0;
+    f.getMainComponentAsync.mockImplementation(async () => {
+      clock = 10;
+      return f.main;
+    });
+    expect(
+      await createRebindVariablesHandler(
+        f.api,
+        () => clock,
+      )({ mapping, includeOrphanMains: true, dryRun: false, timeBudgetMs: 10 }),
+    ).toMatchObject({
+      complete: false,
+      visited: 2,
+      changed: { fills: 1 },
+      orphanMains: { count: 1, visited: 0 },
+    });
+    expect(f.main.fills).toEqual([solid()]);
+    expect(
+      await createRebindVariablesHandler(f.api)({
+        mapping,
+        includeOrphanMains: true,
+        dryRun: false,
+      }),
+    ).toMatchObject({
+      complete: true,
+      changed: { fills: 2 },
+    });
+  });
+  it('yields cooperatively while walking extra roots within the shared budget', async () => {
+    const f = orphanFixture();
+    const due = vi.spyOn(TimeSlice.prototype, 'due').mockReturnValue(true);
+    const handoff = vi.spyOn(TimeSlice.prototype, 'yield').mockResolvedValue();
+    try {
+      expect(
+        await createRebindVariablesHandler(f.api)({ mapping, includeOrphanMains: true }),
+      ).toMatchObject({ orphanMains: { visited: 2 } });
+      expect(handoff).toHaveBeenCalledTimes(2);
+    } finally {
+      due.mockRestore();
+      handoff.mockRestore();
+    }
+  });
+  it('reports lookup failures and continues to later instances', async () => {
+    const f = orphanFixture();
+    f.page.children.unshift(
+      Object.assign(
+        { ...f.instance, id: 'broken' },
+        {
+          getMainComponentAsync: vi.fn<() => Promise<never>>(async () => {
+            throw new Error('unavailable main');
+          }),
+        },
+      ),
+    );
+    expect(
+      await createRebindVariablesHandler(f.api)({
+        mapping,
+        includeOrphanMains: true,
+        dryRun: false,
+      }),
+    ).toMatchObject({
+      complete: true,
+      failedCount: 1,
+      failed: [{ nodeId: 'broken', error: 'unavailable main' }],
+      changed: { fills: 2 },
+      orphanMains: { count: 1 },
+    });
+  });
+});
 describe('rebind_variables', () => {
   it('supports a many-to-one collection merge and resumes idempotently for disjoint ids', async () => {
     const f = fixture();

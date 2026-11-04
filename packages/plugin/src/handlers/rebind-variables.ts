@@ -12,6 +12,9 @@ import {
 } from './variable-bindings.js';
 
 const counts = () => ({ fills: 0, strokes: 0, effects: 0, layoutGrids: 0, scalars: 0 });
+// Typings explicitly allow parentless remote or soft-deleted main components. Such a
+// component is still writable if not removed; no document-tree walk can reach it.
+const isOrphanMain = (node: ComponentNode): boolean => !node.removed && node.parent === null;
 export const createRebindVariablesHandler =
   (api: typeof figma, now: () => number = Date.now): SandboxToolHandler =>
   async params => {
@@ -20,6 +23,7 @@ export const createRebindVariablesHandler =
       mapping?: { from: string; to: string }[];
       dryRun?: boolean;
       includeInstanceSublayers?: boolean;
+      includeOrphanMains?: boolean;
       fields?: BindingGroup[];
       timeBudgetMs?: number;
     };
@@ -73,14 +77,25 @@ export const createRebindVariablesHandler =
     const changedSamples: { nodeId: string; field: string; from: string; to: string }[] = [];
     const perMapping = p.mapping.map(pair => ({ ...pair, count: 0 }));
     const perFrom = new Map(perMapping.map(row => [row.from, row]));
+    const orphanMainIds = new Set<string>();
+    const orphanMains = { visited: 0, count: 0, samples: [] as string[] };
+    const recordFailure = (node: SceneNode, error: unknown) => {
+      failedCount += 1;
+      if (failed.length < 20)
+        failed.push({
+          nodeId: node.id,
+          error: (error instanceof Error ? error.message : String(error)).slice(0, 120),
+        });
+    };
     const traversal = await visitBindings(
       api,
       scope.nodes,
       deadline,
       now,
-      async (node, overrides) => {
+      async (node, overrides, additional) => {
         try {
           if (node.removed) return;
+          if (additional) orphanMains.visited++;
           const styled = new Set<BindingGroup>();
           for (const group of fields)
             if (hasBindingStyle(node, group)) {
@@ -179,15 +194,26 @@ export const createRebindVariablesHandler =
             }
           }
         } catch (error) {
-          failedCount += 1;
-          if (failed.length < 20)
-            failed.push({
-              nodeId: node.id,
-              error: (error instanceof Error ? error.message : String(error)).slice(0, 120),
-            });
+          recordFailure(node, error);
         }
       },
       p.includeInstanceSublayers ?? false,
+      p.includeOrphanMains
+        ? async node => {
+            if (node.type !== 'INSTANCE' || now() >= deadline) return;
+            try {
+              const main = await node.getMainComponentAsync();
+              if (!main || !isOrphanMain(main) || orphanMainIds.has(main.id)) return;
+              orphanMainIds.add(main.id);
+              orphanMains.count++;
+              if (orphanMains.samples.length < 5) orphanMains.samples.push(main.id);
+              return main;
+            } catch (error) {
+              recordFailure(node, error);
+              return;
+            }
+          }
+        : undefined,
     );
     return {
       dryRun,
@@ -195,6 +221,7 @@ export const createRebindVariablesHandler =
       ...traversal,
       matched,
       changed,
+      orphanMains,
       skippedInherited,
       skippedStyled,
       skippedStyledSamples,

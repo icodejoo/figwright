@@ -15,6 +15,7 @@ describe('variable binding tool contracts', () => {
       mapping: [{ from: 'a', to: 'b' }],
       dryRun: true,
       includeInstanceSublayers: false,
+      includeOrphanMains: false,
       timeBudgetMs: 90000,
     });
     for (const mapping of [
