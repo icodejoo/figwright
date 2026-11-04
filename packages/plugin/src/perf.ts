@@ -10,7 +10,10 @@ export interface PerfCall {
   pageLoadMs: number;
   yieldCount: number;
   yieldMs: number;
+  /** Forest collection (including its host yields); excludes mainLookupMs in get_instance_mains. */
   traversalMs: number;
+  /** Wall time awaiting get_instance_mains batches, including native page loads; excludes traversal. */
+  mainLookupMs: number;
   serializationMs: number;
   /** Synchronous readExposure time; a subset of serializationMs. Do not add them. */
   exposureMs: number;
@@ -48,6 +51,7 @@ export const beginPerf = (id: string, tool: string): PerfCall | undefined => {
     yieldCount: 0,
     yieldMs: 0,
     traversalMs: 0,
+    mainLookupMs: 0,
     serializationMs: 0,
     exposureMs: 0,
     exposureCalls: 0,

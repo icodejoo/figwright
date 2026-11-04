@@ -1,7 +1,14 @@
 {
   "minPluginVersion": "0.8.0",
   "tools": {
-    "get_instance_mains": ["limit", "nameContains", "root", "scope", "timeBudgetMs"],
+    "get_instance_mains": [
+      "includeTimings",
+      "limit",
+      "nameContains",
+      "root",
+      "scope",
+      "timeBudgetMs"
+    ],
     "list_children": ["nodeId", "types"],
     "ping": [],
     "get_selection": ["brief"],

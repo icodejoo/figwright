@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { TimeSlice } from '../../src/cooperative.js';
 import { createGetInstanceMainsHandler } from '../../src/handlers/get-instance-mains.js';
 import { createListChildrenHandler } from '../../src/handlers/list-children.js';
+import { beginPerf, perfStats, withPerfApi } from '../../src/perf.js';
 import * as serializer from '../../src/serializer.js';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  perfStats({ enabled: false, reset: true });
+});
 const fixture = () => {
   const page = {
     id: 'page',
@@ -123,11 +128,231 @@ describe('get_instance_mains', () => {
     });
     expect(
       await createGetInstanceMainsHandler(f.api, () => time)({ timeBudgetMs: 10 }),
-    ).toMatchObject({ complete: false, counts: { instances: 1 } });
+    ).toMatchObject({ complete: false, counts: { instances: 2 } });
     for (const args of [{ limit: 20001 }, { timeBudgetMs: 100001 }, { scope: 'bad' }])
+      // eslint-disable-next-line no-await-in-loop -- assert each invalid argument independently
       await expect(createGetInstanceMainsHandler(f.api)(args)).rejects.toThrow(
         'get_instance_mains:',
       );
+  });
+
+  it.each([
+    { scope: 'topLevel' },
+    { scope: 'all' },
+    { nameContains: 'CONTROL' },
+    { limit: 1 },
+    { nameContains: 'button' },
+    {},
+  ])('preserves every result field for %j', async params => {
+    const f = fixture();
+    const set = { id: 'set', name: 'Controls', type: 'COMPONENT_SET', parent: null };
+    f.main.parent = set;
+    f.page.children.push(f.make('missing', null));
+    const row = (id: string) => ({
+      instanceId: id,
+      mainId: 'main',
+      mainName: 'Button',
+      setId: 'set',
+      setName: 'Controls',
+      orphan: true,
+    });
+    const ids = params.scope === 'all' ? ['1', 'I1', '2'] : params.limit ? ['1'] : ['1', '2'];
+    const missing = !params.nameContains && !params.limit;
+    expect(await createGetInstanceMainsHandler(f.api)(params)).toEqual({
+      instances: [
+        ...ids.map(row),
+        ...(missing ? [{ instanceId: 'missing', mainId: null, orphan: false, missing: true }] : []),
+      ],
+      distinctMains: [
+        {
+          mainId: 'main',
+          mainName: 'Button',
+          setName: 'Controls',
+          count: ids.length,
+          orphan: true,
+        },
+      ],
+      counts: {
+        instances: ids.length + Number(missing),
+        orphan: ids.length,
+        missing: Number(missing),
+      },
+      complete: !params.limit,
+      truncated: Boolean(params.limit),
+    });
+  });
+
+  it('bounds concurrent native lookups and preserves order when they finish in reverse', async () => {
+    const f = fixture();
+    let active = 0;
+    let maximum = 0;
+    let calls = 0;
+    let pending: (() => void)[] = [];
+    f.page.children = Array.from({ length: 130 }, (_, i) => ({
+      id: String(i),
+      type: 'INSTANCE',
+      getMainComponentAsync: () => {
+        calls += 1;
+        active += 1;
+        maximum = Math.max(maximum, active);
+        return new Promise(resolve => {
+          pending.push(() => {
+            active -= 1;
+            resolve(f.main);
+          });
+          if (pending.length === 64 || calls === 130) {
+            const batch = pending;
+            pending = [];
+            queueMicrotask(() => {
+              for (const done of batch.toReversed()) done();
+            });
+          }
+        });
+      },
+    }));
+    const result = await createGetInstanceMainsHandler(f.api)({});
+    expect(maximum).toBeGreaterThan(1);
+    expect(maximum).toBeLessThanOrEqual(64);
+    expect(calls).toBe(130);
+    expect(active).toBe(0);
+    expect(result).toMatchObject({
+      counts: { instances: 130 },
+      complete: true,
+      instances: Array.from({ length: 130 }, (_, i) =>
+        expect.objectContaining({ instanceId: String(i) }),
+      ),
+    });
+  });
+
+  it('retains completed batches and the entire in-flight batch at budget expiry', async () => {
+    const f = fixture();
+    let time = 0;
+    let calls = 0;
+    const nodes = Array.from({ length: 150 }, (_, i) => {
+      const node = f.make(String(i));
+      node.getMainComponentAsync.mockImplementation(async () => {
+        calls += 1;
+        if (calls === 65) time = 10;
+        return f.main;
+      });
+      return node;
+    });
+    f.page.children = nodes;
+    expect(
+      await createGetInstanceMainsHandler(f.api, () => time)({ timeBudgetMs: 10 }),
+    ).toMatchObject({
+      complete: false,
+      truncated: false,
+      counts: { instances: 128 },
+      distinctMains: [{ mainId: 'main', count: 128 }],
+      instances: Array.from({ length: 128 }, (_, i) =>
+        expect.objectContaining({ instanceId: String(i) }),
+      ),
+    });
+    expect(calls).toBe(128);
+    expect(nodes[128]!.getMainComponentAsync).not.toHaveBeenCalled();
+  });
+
+  it('walks a shared main ancestor chain only once across batches and resets per request', async () => {
+    const f = fixture();
+    const parent = vi.fn<() => null>(() => null);
+    f.main.parent = {
+      id: 'detached',
+      type: 'FRAME',
+      get parent() {
+        return parent();
+      },
+    };
+    f.page.children = Array.from({ length: 130 }, (_, i) => f.make(String(i)));
+    expect(await createGetInstanceMainsHandler(f.api)({})).toMatchObject({
+      counts: { orphan: 130 },
+    });
+    expect(parent).toHaveBeenCalledOnce();
+    await createGetInstanceMainsHandler(f.api)({});
+    expect(parent).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips instance subtrees at topLevel and only calls the native API on instances', async () => {
+    const f = fixture();
+    const children = vi.fn<() => (typeof f.nested)[]>(() => [f.nested]);
+    Object.defineProperty(f.first, 'children', { get: children });
+    const unrelatedLookup = vi.fn<() => never>(() => {
+      throw new Error('not an instance');
+    });
+    f.page.children.push({
+      id: 'frame',
+      type: 'FRAME',
+      children: [f.second],
+      getMainComponentAsync: unrelatedLookup,
+    });
+    await createGetInstanceMainsHandler(f.api)({ scope: 'topLevel' });
+    expect(children).not.toHaveBeenCalled();
+    expect(f.nested.getMainComponentAsync).not.toHaveBeenCalled();
+    expect(unrelatedLookup).not.toHaveBeenCalled();
+    await createGetInstanceMainsHandler(f.api)({ scope: 'all' });
+    expect(children).toHaveBeenCalledOnce();
+    expect(f.nested.getMainComponentAsync).toHaveBeenCalledOnce();
+  });
+
+  it('reports timings only when requested and attributes separate perf stages', async () => {
+    const f = fixture();
+    let time = 0;
+    Object.defineProperty(f.first, 'type', {
+      get: () => {
+        time += 1;
+        return 'INSTANCE';
+      },
+    });
+    f.first.getMainComponentAsync.mockImplementation(async () => {
+      time += 7;
+      return f.main;
+    });
+    const handler = createGetInstanceMainsHandler(f.api, () => time);
+    expect(await handler({})).not.toHaveProperty('timings');
+    expect(await handler({ includeTimings: false })).not.toHaveProperty('timings');
+    perfStats({ enabled: true });
+    const call = beginPerf('mains', 'get_instance_mains')!;
+    const result = await createGetInstanceMainsHandler(
+      withPerfApi(f.api, call),
+      () => time,
+    )({ includeTimings: true });
+    expect(result).toHaveProperty('timings', { traversalMs: 4, lookupMs: 7, concurrency: 2 });
+    expect(call).toMatchObject({ traversalMs: 4, mainLookupMs: 7 });
+    expect(await handler({ includeTimings: true })).toHaveProperty('timings', {
+      traversalMs: 4,
+      lookupMs: 7,
+      concurrency: 2,
+    });
+  });
+
+  it('does not start collected lookups after traversal exhausts the budget', async () => {
+    const f = fixture();
+    let time = 0;
+    vi.spyOn(TimeSlice.prototype, 'due').mockReturnValue(true);
+    vi.spyOn(TimeSlice.prototype, 'yield').mockImplementation(async () => {
+      time = 10;
+    });
+    expect(await createGetInstanceMainsHandler(f.api, () => time)({ timeBudgetMs: 10 })).toEqual({
+      instances: [],
+      distinctMains: [],
+      counts: { instances: 0, orphan: 0, missing: 0 },
+      complete: false,
+      truncated: false,
+    });
+    expect(f.first.getMainComponentAsync).not.toHaveBeenCalled();
+    expect(f.second.getMainComponentAsync).not.toHaveBeenCalled();
+  });
+
+  it('yields cooperatively while traversing nodes without instances', async () => {
+    const f = fixture();
+    f.page.children = Array.from({ length: 100 }, (_, i) => ({ id: String(i), type: 'RECTANGLE' }));
+    vi.spyOn(TimeSlice.prototype, 'due').mockReturnValue(true);
+    const yielding = vi.spyOn(TimeSlice.prototype, 'yield').mockResolvedValue();
+    expect(await createGetInstanceMainsHandler(f.api)({})).toMatchObject({
+      complete: true,
+      counts: { instances: 0 },
+    });
+    expect(yielding).toHaveBeenCalledTimes(99);
   });
 });
 
