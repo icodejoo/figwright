@@ -13,8 +13,15 @@ import {
 
 const counts = () => ({ fills: 0, strokes: 0, effects: 0, layoutGrids: 0, scalars: 0 });
 // Typings explicitly allow parentless remote or soft-deleted main components. Such a
-// component is still writable if not removed; no document-tree walk can reach it.
-const isOrphanMain = (node: ComponentNode): boolean => !node.removed && node.parent === null;
+// component is still writable if not removed; no document-tree walk can reach it. A main
+// inside a detached component set is just as unreachable, so walk the whole parent chain
+// and call it an orphan when the chain ends anywhere but a page.
+const isOrphanMain = (node: ComponentNode): boolean => {
+  if (node.removed) return false;
+  let cur: BaseNode | null = node;
+  while (cur && cur.type !== 'PAGE' && cur.type !== 'DOCUMENT') cur = cur.parent;
+  return cur === null;
+};
 export const createRebindVariablesHandler =
   (api: typeof figma, now: () => number = Date.now): SandboxToolHandler =>
   async params => {

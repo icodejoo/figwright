@@ -46,6 +46,33 @@ describe('rebind_variables orphan mains', () => {
       expect(f.writes).toHaveBeenCalledTimes(2);
     },
   );
+  it('treats a main inside a detached component set as an orphan', async () => {
+    const f = orphanFixture();
+    const detachedSet = { type: 'COMPONENT_SET', parent: null, removed: false };
+    Object.assign(f.main, { parent: detachedSet });
+    expect(
+      await createRebindVariablesHandler(f.api)({
+        mapping,
+        includeOrphanMains: true,
+        includeInstanceSublayers: true,
+        dryRun: false,
+      }),
+    ).toMatchObject({ changed: { fills: 2 }, orphanMains: { count: 1, samples: ['main'] } });
+  });
+  it('does not treat a main whose parent chain reaches a page as an orphan', async () => {
+    const f = orphanFixture();
+    Object.assign(f.main, {
+      parent: { type: 'COMPONENT_SET', parent: { type: 'PAGE', parent: null } },
+    });
+    expect(
+      await createRebindVariablesHandler(f.api)({
+        mapping,
+        includeOrphanMains: true,
+        includeInstanceSublayers: true,
+        dryRun: false,
+      }),
+    ).toMatchObject({ orphanMains: { count: 0 } });
+  });
   it('does not query main components by default, even when traversing instance sublayers', async () => {
     const f = orphanFixture();
     for (const includeInstanceSublayers of [false, true])
