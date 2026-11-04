@@ -1,5 +1,5 @@
 import { ErrorCode, type RpcResponse } from '@figwright/shared';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   DispatchError,
@@ -13,7 +13,7 @@ import { portConflictMessage } from '../src/election/leader-lock.js';
 import { type Node, NodeRole } from '../src/election/node.js';
 import { configureServerPerf, serverPerfStats } from '../src/perf.js';
 import type { PluginSessionInfo } from '../src/routing/sessions.js';
-import { clearFileTarget, setFileTarget } from '../src/routing/target.js';
+import { clearFileTarget, getFileTarget, setFileTarget } from '../src/routing/target.js';
 import { captureNotices, withRoutingNotice } from '../src/tools/notices.js';
 
 const makeNode = (overrides: Partial<Node>): Node =>
@@ -495,6 +495,12 @@ describe('resolveRoutingSession', () => {
 });
 
 describe('dispatchTargeted', () => {
+  beforeAll(() => {
+    process.env.FIGWRIGHT_RECONNECT_WAIT_MS = '0';
+  });
+  afterAll(() => {
+    delete process.env.FIGWRIGHT_RECONNECT_WAIT_MS;
+  });
   const info = (id: string, fileName: string): PluginSessionInfo => ({
     id,
     fileName,
@@ -579,6 +585,148 @@ describe('dispatchTargeted', () => {
     // the relay's cached names are empty for a session that has just reconnected.
     expect(seen).toEqual(['t:s-2', 'list_files:s-9', 't:s-9']);
     expect(result).toEqual({ served: 's-9' });
+  });
+
+  it.each(['get_document', 'set_fills'])(
+    'rebinds %s once after a definite non-delivery and preserves requestId',
+    async tool => {
+      const seen: Array<{ tool: string; args: unknown; sessionId: string | undefined }> = [];
+      setFileTarget({ sessionId: 'old', fileName: 'Brand', fileKey: 'key' });
+      const node = makeNode({ isLeader: () => false });
+      const follower = makeFollower({
+        listSessions: async () => [info('new', 'Brand')],
+        sendRpc: async (name, args, requestId, sessionId): Promise<RpcResponse> => {
+          seen.push({ tool: name, args, sessionId });
+          if (sessionId === 'old')
+            return {
+              kind: 'err',
+              requestId: requestId!,
+              code: ErrorCode.PluginDisconnected,
+              message: 'pinned session not connected (sessionId=old, method=t)',
+            };
+          return {
+            kind: 'ok',
+            requestId: requestId!,
+            result:
+              name === 'list_files'
+                ? {
+                    files: [
+                      { fileName: 'Brand', fileKey: 'key', currentPage: { id: 'p', name: 'Page' } },
+                    ],
+                  }
+                : { ok: true },
+          };
+        },
+      });
+      const args = { requestId: 'stable-write-id' };
+      const result = await captureNotices(
+        async () => ({
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(await dispatchTargeted({ node, follower }, tool, args)),
+            },
+          ],
+        }),
+        r => r,
+      );
+      expect(seen.filter(c => c.tool === tool)).toEqual([
+        { tool, args, sessionId: 'old' },
+        { tool, args, sessionId: 'new' },
+      ]);
+      expect(result.content).toEqual([
+        { type: 'text', text: '{"ok":true}' },
+        { type: 'text', text: '\n\nnote: session re-bound by file name (old -> new)' },
+      ]);
+    },
+  );
+
+  it.each([
+    ['get_document', true],
+    ['set_fills', false],
+  ] as const)('handles an already delivered %s conservatively', async (tool, retries) => {
+    setFileTarget({ sessionId: 'old', fileName: 'Brand' });
+    const seen: string[] = [];
+    const follower = makeFollower({
+      listSessions: async () => [info('new', 'Brand')],
+      sendRpc: async (name, _args, requestId, sessionId): Promise<RpcResponse> => {
+        seen.push(`${name}:${sessionId}`);
+        if (sessionId === 'old')
+          return {
+            kind: 'err',
+            requestId: requestId!,
+            code: ErrorCode.Internal,
+            message: 'INTERNAL: plugin failed after applying',
+          };
+        return {
+          kind: 'ok',
+          requestId: requestId!,
+          result:
+            name === 'list_files'
+              ? {
+                  files: [
+                    { fileName: 'Brand', fileKey: null, currentPage: { id: 'p', name: 'Page' } },
+                  ],
+                }
+              : { ok: true },
+        };
+      },
+    });
+    const call = dispatchTargeted(
+      { node: makeNode({ isLeader: () => false }), follower },
+      tool,
+      {},
+    );
+    const outcome = await call.then(
+      value => value,
+      (err: Error) => err.message,
+    );
+    const expected = retries ? /"ok":true/ : /plugin failed after applying.*已重绑，请重试/;
+    expect(JSON.stringify(outcome)).toMatch(expected);
+    expect(getFileTarget()?.sessionId).toBe('new');
+    expect(seen.filter(c => c.startsWith(`${tool}:`))).toEqual(
+      retries ? [`${tool}:old`, `${tool}:new`] : [`${tool}:old`],
+    );
+  });
+
+  it.each([
+    [{ id: 'new', fileName: 'Brand', fileKey: 'different' }],
+    [
+      { id: 'a', fileName: 'Brand', fileKey: 'key' },
+      { id: 'b', fileName: 'Brand', fileKey: 'key' },
+    ],
+  ])('refuses conflicting candidates and lists connected names and ids', async (...candidates) => {
+    setFileTarget({ sessionId: 'old', fileName: 'Brand', fileKey: 'key' });
+    const calls: string[] = [];
+    const follower = makeFollower({
+      listSessions: async () =>
+        candidates.map(c => ({ ...info(c.id, c.fileName), fileKey: c.fileKey })),
+      sendRpc: async (name, _args, requestId, sessionId): Promise<RpcResponse> => {
+        calls.push(name);
+        if (name !== 'list_files')
+          return {
+            kind: 'err',
+            requestId: requestId!,
+            code: ErrorCode.PluginDisconnected,
+            message: 'pinned session not connected (sessionId=old, method=t)',
+          };
+        const candidate = candidates.find(c => c.id === sessionId)!;
+        return {
+          kind: 'ok',
+          requestId: requestId!,
+          result: { files: [{ ...candidate, currentPage: { id: 'p', name: 'Page' } }] },
+        };
+      },
+    });
+    const call = dispatchTargeted(
+      { node: makeNode({ isLeader: () => false }), follower },
+      'get_document',
+      {},
+    );
+    for (const candidate of candidates)
+      await expect(call).rejects.toThrow(`Brand [${candidate.id}]`);
+    expect(calls.filter(c => c === 'get_document')).toHaveLength(1);
+    expect(getFileTarget()?.sessionId).toBe('old');
   });
 
   it('fails rather than falling back to another file when the claim cannot be recovered', async () => {

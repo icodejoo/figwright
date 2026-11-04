@@ -14,6 +14,7 @@ export interface PluginSessionInfo {
    * not just a startup race. `list_files` fills those in by asking each plugin directly.
    */
   fileName: string | null;
+  fileKey?: string | null;
   pageName: string | null;
   lastActivityAt: number;
   pluginVersion: string;

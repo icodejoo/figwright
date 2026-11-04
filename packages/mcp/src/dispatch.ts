@@ -209,7 +209,7 @@ export const resolveRoutingSession = async (ctx: DispatchContext): Promise<strin
  * travels with it (see leader-endpoints' error mapping).
  */
 const isPinnedSessionGone = (err: unknown): boolean =>
-  err instanceof Error && err.message.includes('pinned session not connected');
+  err instanceof Error && err.message.startsWith('pinned session not connected (sessionId=');
 
 /**
  * How long a "how many files are open?" read is reused for the ambiguity warning below.
@@ -263,10 +263,20 @@ const sessionDispatch =
  * Resolve this process's claimed session, asking the plugins for their file names only if the cheap
  * check fails (see routing/target.ts's SessionSource).
  */
+/**
+ * How long a bound file may stay absent (panel reconnect, relay leader change) before the call
+ * fails.
+ */
+const boundFileReconnectWaitMs = (): number => {
+  const raw = Number(process.env.FIGWRIGHT_RECONNECT_WAIT_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 5000;
+};
+
 const resolveTargetFor = async (ctx: DispatchContext): Promise<string | undefined> =>
   resolveFileTarget(
     () => listPluginSessions(ctx),
     async () => namedSessions(await listPluginSessions(ctx), sessionDispatch(ctx)),
+    { waitMs: boundFileReconnectWaitMs() },
   );
 
 /**
@@ -298,12 +308,27 @@ export const dispatchTargeted = async (
   try {
     return await dispatchTool(ctx, toolName, args, { ...opts, sessionId: target.sessionId });
   } catch (err) {
-    if (!isPinnedSessionGone(err)) throw err;
+    const notDelivered = isPinnedSessionGone(err);
+    if (!notDelivered) {
+      // A plugin error is not proof of non-delivery. Only consider recovery if the old
+      // session has actually disappeared; a still-connected plugin keeps its original error.
+      if ((await listPluginSessions(ctx)).some(s => s.id === target.sessionId)) throw err;
+    }
     // Throws (with the file named, and what is connected instead) when the binding cannot be
     // recovered — deliberately, because the fallback would be another file's nodes. It can only
     // answer undefined for an unbound process, which this one is not.
     const recovered = await resolveTargetFor(ctx);
-    if (recovered === undefined) throw err;
+    if (recovered === undefined || recovered === target.sessionId) throw err;
+    // Lazy: ping imports dispatch too, so a static registry import creates a cycle.
+    const { ALL_TOOL_SPECS } = await import('./tools/registry.js');
+    const kind = ALL_TOOL_SPECS.find(spec => spec.name === toolName)?.kind;
+    if (!notDelivered && kind !== 'read') {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `${message}\nSession re-bound; please retry (已重绑，请重试). Delivery of the original call is unverified.`,
+        { cause: err },
+      );
+    }
     return dispatchTool(ctx, toolName, args, { ...opts, sessionId: recovered });
   }
 };

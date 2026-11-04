@@ -137,7 +137,7 @@ const dispatchToSession = (
 const routedDispatch = async (): Promise<typeof dispatch> => {
   const sessionId = await resolveRoutingSession(dispatchCtx);
   const opts = sessionId === undefined ? {} : { sessionId };
-  return (tool, args) => dispatchTool(dispatchCtx, tool, args, opts);
+  return (tool, args) => dispatchTargeted(dispatchCtx, tool, args, opts);
 };
 
 const textResult = (data: unknown): CallToolResult => ({

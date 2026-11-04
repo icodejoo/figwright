@@ -153,3 +153,30 @@ describe('withSkewNotice', () => {
     expect(withSkewNotice(untouched, null)).toBe(untouched);
   });
 });
+
+describe('background tab errors', () => {
+  const original =
+    'Unable to establish connection to Figma after 10 seconds. Please check your internet connection.';
+  const hint =
+    "If this file's tab is in the background, Figma throttles it — bring the tab to the front and retry.";
+  const fail = (message: string) =>
+    captureNotices(
+      async () => {
+        throw new Error(message);
+      },
+      r => r,
+    );
+
+  it('keeps the original error and appends the tab hint', async () => {
+    await expect(fail(original)).rejects.toThrow(`${original}\n${hint}`);
+  });
+
+  it('does not append the hint twice through nested captures', async () => {
+    await expect(
+      captureNotices(
+        () => fail(`${original}\n${hint}`),
+        r => r,
+      ),
+    ).rejects.toThrow(new Error(`${original}\n${hint}`));
+  });
+});

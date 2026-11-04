@@ -34,6 +34,40 @@ afterEach(() => {
   clearFileTarget();
 });
 
+describe('resolveFileTarget bounded wait', () => {
+  it('re-probes a briefly absent bound file and adopts it when it returns', async () => {
+    await bindFileTarget(source(session('s-1', 'Doc')), { fileName: 'Doc' });
+    let probes = 0;
+    const probe = async (): Promise<readonly PluginSessionInfo[]> => {
+      probes += 1;
+      return probes < 3 ? [] : [session('s-2', 'Doc')];
+    };
+    const sleep = async (): Promise<void> => undefined;
+    expect(await resolveFileTarget(probe, probe, { waitMs: 5000, stepMs: 500, sleep })).toBe('s-2');
+    expect(probes).toBe(3);
+  });
+  it('gives up after waitMs and keeps the original error', async () => {
+    await bindFileTarget(source(session('s-1', 'Doc')), { fileName: 'Doc' });
+    let slept = 0;
+    const probe = source();
+    await expect(
+      resolveFileTarget(probe, probe, {
+        waitMs: 1500,
+        stepMs: 500,
+        sleep: async ms => {
+          slept += ms;
+        },
+      }),
+    ).rejects.toThrow(/no longer connected/);
+    expect(slept).toBe(1500);
+  });
+  it('does not wait by default', async () => {
+    await bindFileTarget(source(session('s-1', 'Doc')), { fileName: 'Doc' });
+    const probe = source();
+    await expect(resolveFileTarget(probe, probe)).rejects.toThrow(/no longer connected/);
+  });
+});
+
 describe('bindFileTarget', () => {
   it('binds by file name, case- and whitespace-insensitively', async () => {
     const { target } = await bindFileTarget(source(session('s-1', 'Design System')), {

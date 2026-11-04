@@ -106,7 +106,12 @@ export const probeSessions = async (
         const file = reply.files[0];
         if (file === undefined) throw new Error('plugin returned no file');
         return {
-          session: { ...session, fileName: file.fileName, pageName: file.currentPage.name },
+          session: {
+            ...session,
+            fileName: file.fileName,
+            fileKey: file.fileKey,
+            pageName: file.currentPage.name,
+          },
           fileKey: file.fileKey,
           currentPage: file.currentPage,
         };

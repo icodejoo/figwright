@@ -21,6 +21,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 export interface NoticeBox {
   skew: string | null;
   routing: string | null;
+  rebind: string | null;
 }
 
 const store = new AsyncLocalStorage<NoticeBox>();
@@ -43,10 +44,16 @@ export const captureNotices = async (
   run: () => Promise<CallToolResult>,
   finish: (result: CallToolResult, notices: NoticeBox) => CallToolResult,
 ): Promise<CallToolResult> => {
-  const box: NoticeBox = { skew: null, routing: null };
+  const box: NoticeBox = { skew: null, routing: null, rebind: null };
   try {
     const result = await store.run(box, run);
-    return finish(result, box);
+    const finished = finish(result, box);
+    return box.rebind === null
+      ? finished
+      : {
+          ...finished,
+          content: [...finished.content, { type: 'text', text: `\n\nnote: ${box.rebind}` }],
+        };
   } catch (err) {
     // A failure needs the warning as much as a result does — more, arguably: an out-of-date plugin
     // answers METHOD_NOT_FOUND for every tool it predates, and unattributed that reads as "this
@@ -54,10 +61,12 @@ export const captureNotices = async (
     // turns a thrown error into the tool result the model sees, so the message is where it has to
     // go; `finish` never runs on this path.
     const suffix =
+      (box.rebind === null ? '' : `\n\nnote: ${box.rebind}`) +
       (box.routing === null ? '' : asRoutingBlock(box.routing)) +
       (box.skew === null ? '' : asBlock(box.skew));
-    if (suffix === '') throw err;
-    const message = err instanceof Error ? err.message : String(err);
+    const original = err instanceof Error ? err.message : String(err);
+    const message = withBackgroundTabHint(original);
+    if (suffix === '' && message === original) throw err;
     throw new Error(`${message}${suffix}`, { cause: err });
   }
 };
@@ -129,3 +138,18 @@ export const withSkewNotice = (result: CallToolResult, notice: string | null): C
     content: [...result.content, { type: 'text' as const, text: asBlock(notice) }],
   };
 };
+
+/** A recovery note stays separate from JSON/image payloads, like the existing warnings. */
+export const reportRebind = (notice: string): void => {
+  const box = store.getStore();
+  if (box !== undefined) box.rebind = box.rebind === null ? notice : `${box.rebind}\n${notice}`;
+};
+
+const BACKGROUND_TAB_HINT =
+  "If this file's tab is in the background, Figma throttles it — bring the tab to the front and retry.";
+
+const withBackgroundTabHint = (message: string): string =>
+  message.includes('Unable to establish connection to Figma after 10 seconds') &&
+  !message.includes(BACKGROUND_TAB_HINT)
+    ? `${message}\n${BACKGROUND_TAB_HINT}`
+    : message;

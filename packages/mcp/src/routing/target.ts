@@ -1,3 +1,4 @@
+import { reportRebind } from '../tools/notices.js';
 import { describeSessions, type PluginSessionInfo, sessionsMatchingFile } from './sessions.js';
 
 /**
@@ -34,6 +35,7 @@ export interface FileTarget {
    * at once are exactly the two it cannot tell apart.
    */
   fileName: string | null;
+  fileKey?: string | null;
 }
 
 /**
@@ -111,7 +113,11 @@ export const bindFileTarget = async (
         `no connected session ${request.sessionId}. Connected now: ${describeSessions(sessions)}`,
       );
     }
-    target = { sessionId: match.id, fileName: match.fileName };
+    target = {
+      sessionId: match.id,
+      fileName: match.fileName,
+      ...(match.fileKey ? { fileKey: match.fileKey } : {}),
+    };
     return { target, sessions };
   }
 
@@ -130,7 +136,11 @@ export const bindFileTarget = async (
       );
     }
     const only = matches[0] as PluginSessionInfo;
-    target = { sessionId: only.id, fileName: only.fileName };
+    target = {
+      sessionId: only.id,
+      fileName: only.fileName,
+      ...(only.fileKey ? { fileKey: only.fileKey } : {}),
+    };
     return { target, sessions };
   }
 
@@ -146,14 +156,28 @@ export const bindFileTarget = async (
  * 1. Nothing bound — undefined. Untouched follow-the-foreground behaviour.
  * 2. The bound session is still connected — use it. The normal path, and exact.
  * 3. It is gone, and exactly one connected session carries the bound file name — the panel was
- *    reopened, so adopt the new session id. Safe to do silently _because_ it is unique among what
- *    is connected: there is no other file it could have meant.
+ *    reopened, so adopt the new session id. Safe to recover with a result note because it is unique
+ *    among what is connected: there is no other file it could have meant.
  * 4. Anything else — throw. Zero matches means the file is not open; two or more means the name cannot
  *    choose, and guessing is the failure this exists to prevent.
  */
+/**
+ * Optional bounded wait for a bound file that has briefly dropped out (panel reconnect, leader
+ * election).
+ */
+export interface ResolveWaitOptions {
+  /** Total time to keep re-probing while the bound file is not connected. 0 (default) fails at once. */
+  waitMs?: number;
+  /** Probe interval. */
+  stepMs?: number;
+  /** Injected in tests; defaults to a real timer. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
 export const resolveFileTarget = async (
   connectedSessions: SessionSource,
   probeSessions: SessionSource,
+  wait: ResolveWaitOptions = {},
 ): Promise<string | undefined> => {
   if (target === null) return undefined;
 
@@ -162,7 +186,7 @@ export const resolveFileTarget = async (
 
   // Past here a name has to be matched, and the relay's cached names are unreliable — a session
   // that reconnected moments ago has none at all. Ask the plugins.
-  const sessions = await probeSessions();
+  let sessions = await probeSessions();
   if (sessions.some(s => s.id === target?.sessionId)) return target.sessionId;
 
   const bound = target.fileName;
@@ -174,20 +198,42 @@ export const resolveFileTarget = async (
     );
   }
 
-  const matches = sessionsMatchingFile(sessions, bound);
-  if (matches.length === 1) {
+  // The file can be briefly absent while its panel reconnects or the relay changes leader; every
+  // session id changes then, so give it a bounded moment to come back before declaring it gone.
+  const {
+    waitMs = 0,
+    stepMs = 500,
+    sleep = ms => new Promise<void>(r => setTimeout(r, ms)),
+  } = wait;
+  let matches = sessions.filter(s => s.fileName === bound);
+  for (let waited = 0; matches.length === 0 && waited < waitMs; waited += stepMs) {
+    await sleep(stepMs);
+    sessions = await probeSessions();
+    if (sessions.some(s => s.id === target?.sessionId)) return target.sessionId;
+    matches = sessions.filter(s => s.fileName === bound);
+  }
+  if (
+    matches.length === 1 &&
+    (!target.fileKey || !matches[0]?.fileKey || target.fileKey === matches[0].fileKey)
+  ) {
     const only = matches[0] as PluginSessionInfo;
-    target = { sessionId: only.id, fileName: only.fileName };
+    reportRebind(`session re-bound by file name (${target.sessionId} -> ${only.id})`);
+    target = {
+      sessionId: only.id,
+      fileName: only.fileName,
+      ...(target.fileKey ? { fileKey: target.fileKey } : {}),
+      ...(only.fileKey ? { fileKey: only.fileKey } : {}),
+    };
     return only.id;
   }
 
   throw new FileTargetError(
-    matches.length === 0
+    matches.length <= 1
       ? `"${bound}" is no longer connected — its Figwright panel was closed, or Figma was. ` +
           `Connected now: ${describeSessions(sessions)}. Reopen the plugin in "${bound}", ` +
           `or call use_file to switch, or use_file({ release: true }) to follow the foreground file.`
       : `"${bound}" now matches ${matches.length} open files, so the reopened panel cannot be ` +
-          `identified by name. Call use_file with one of these sessionIds: ` +
+          `identified by name. Connected now: ${describeSessions(sessions)}. Call use_file with one of these sessionIds: ` +
           `${matches.map(m => `${m.id} (page ${m.pageName ?? '?'})`).join(', ')}`,
   );
 };
