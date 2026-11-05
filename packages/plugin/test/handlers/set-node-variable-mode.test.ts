@@ -129,6 +129,60 @@ describe('set_node_variable_mode handler', () => {
   });
 });
 
+/** A ctx where the collection is only reachable through the team library, like a published library. */
+const libraryCtx = (nodes: Record<string, unknown>) => {
+  const imported: string[] = [];
+  const figmaCtx = {
+    root: { children: [] },
+    currentPage: { id: '0:1' },
+    getNodeByIdAsync: async (id: string) => nodes[id] ?? null,
+    teamLibrary: {
+      getAvailableLibraryVariableCollectionsAsync: async () => [
+        { key: 'colkey', name: 'Color', libraryName: 'widgets' },
+      ],
+      getVariablesInLibraryCollectionAsync: async () => [{ key: 'varkey' }],
+    },
+    variables: {
+      getVariableCollectionByIdAsync: async (id: string) =>
+        id === COLLECTION.id || id === 'remote-col' ? COLLECTION : null,
+      importVariableByKeyAsync: async (key: string) => {
+        imported.push(key);
+        return { variableCollectionId: 'remote-col' };
+      },
+    },
+  } as unknown as typeof figma;
+  return { figmaCtx, imported };
+};
+
+describe('set_node_variable_mode with a library collection', () => {
+  it.each(['colkey', 'VariableCollectionId:colkey', 'widgets/Color'])(
+    'resolves %s through teamLibrary and accepts a mode name',
+    async collectionId => {
+      const frame = modeNode('1:1');
+      const { figmaCtx, imported } = libraryCtx({ '1:1': frame });
+      const result = (await createSetNodeVariableModeHandler(figmaCtx)({
+        nodeId: '1:1',
+        collectionId,
+        modeId: 'Dark',
+      })) as VariableModeResult;
+      expect(imported).toEqual(['varkey']);
+      expect(result).toMatchObject({ ok: true, modeId: '9:0', modeName: 'Dark' });
+      expect(frame.explicitVariableModes).toEqual({ [COLLECTION.id]: '9:0' });
+    },
+  );
+
+  it('still reports an unknown library collection', async () => {
+    const { figmaCtx } = libraryCtx({ '1:1': modeNode('1:1') });
+    await expect(
+      createSetNodeVariableModeHandler(figmaCtx)({
+        nodeId: '1:1',
+        collectionId: 'nope/Nope',
+        modeId: 'Dark',
+      }),
+    ).rejects.toThrow('variable collection nope/Nope not found');
+  });
+});
+
 describe('set_node_variable_mode in a batch', () => {
   // A batchable op that fails: the same tool, with a mode the collection does not have.
   const FAIL = {

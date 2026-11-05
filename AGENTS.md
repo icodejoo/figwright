@@ -1,5 +1,7 @@
 # AGENTS.md
 
+> 本 fork 相对上游新增的工具、参数和行为，见 [docs/fork-additions.md](docs/fork-additions.md)（智能体先读它再动手）。
+
 Figwright is an open-source, **bidirectional** Figma agent for MCP clients (Claude Code and others). It connects an MCP server to a Figma plugin over a local WebSocket relay, letting an AI agent both **read** designs with high-fidelity grounding and **write** back to the canvas — no Figma paid tier required.
 
 This file is the canonical guide for AI agents and contributors working in this repo. (`CLAUDE.md` points here.)
