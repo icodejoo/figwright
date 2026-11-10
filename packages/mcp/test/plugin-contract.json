@@ -1898,6 +1898,18 @@
     ],
     "import_variable": ["requestId", "variableKey"],
     "set_node_variable_mode": ["collectionId", "modeId", "nodeId", "requestId"],
+    "rebuild_orphan_buttons": [
+      "buttonKey",
+      "dryRun",
+      "labelLayerName",
+      "modeCollections",
+      "modeCollections.size",
+      "modeCollections.state",
+      "modeCollections.style",
+      "modeCollections.type",
+      "requestId",
+      "root"
+    ],
     "rename_variable": ["name", "requestId", "variableId"],
     "update_variable": ["description", "hiddenFromPublishing", "requestId", "scopes", "variableId"],
     "set_variable_code_syntax": [

@@ -89,6 +89,7 @@ import { createMoveNodesHandler } from './move-nodes.js';
 import { createNavigateToPageHandler } from './navigate-to-page.js';
 import { createPingHandler } from './ping.js';
 import { createRebindVariablesHandler } from './rebind-variables.js';
+import { createRebuildOrphanButtonsHandler } from './rebuild-orphan-buttons.js';
 import { createRemoveAnimationStyleHandler } from './remove-animation-style.js';
 import { createRemoveManualKeyframeTrackHandler } from './remove-manual-keyframe-track.js';
 import { createRemoveReactionsHandler } from './remove-reactions.js';
@@ -250,6 +251,7 @@ export const createSandboxHandlers = (
     rebind_variables: createRebindVariablesHandler(figmaCtx),
     import_variable: createImportVariableHandler(figmaCtx),
     set_node_variable_mode: createSetNodeVariableModeHandler(figmaCtx),
+    rebuild_orphan_buttons: createRebuildOrphanButtonsHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
     update_variable: createUpdateVariableHandler(figmaCtx),
     set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),

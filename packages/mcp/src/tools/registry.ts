@@ -99,6 +99,7 @@ import { outlineStrokeTool } from './outline-stroke.js';
 import { getPerfStatsTool, loadPageTool } from './perf.js';
 import { pingTool } from './ping.js';
 import { rebindVariablesTool } from './rebind-variables.js';
+import { rebuildOrphanButtonsTool } from './rebuild-orphan-buttons.js';
 import { removeAnimationStyleTool } from './remove-animation-style.js';
 import { removeManualKeyframeTrackTool } from './remove-manual-keyframe-track.js';
 import { removeReactionsTool } from './remove-reactions.js';
@@ -303,6 +304,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   rebindVariablesTool,
   importVariableTool,
   setNodeVariableModeTool,
+  rebuildOrphanButtonsTool,
   renameVariableTool,
   updateVariableTool,
   setVariableCodeSyntaxTool,
