@@ -2430,6 +2430,7 @@ export const NON_BATCHABLE: Readonly<Record<string, string>> = {
     'subtree value binding has no per-operation inverse or atomic rollback; call separately with dryRun first',
   rebind_variables:
     'large in-place rebinding cannot be rolled back per operation; call separately and reverse the mapping to undo (only lossless for unambiguous mappings)',
+  rebuild_orphan_buttons: '批量重建会替换整批节点，原 id 无法按操作回滚；请先 dryRun，再单独调用',
   save_version: 'version history cannot be deleted by the plugin API',
   set_aspect_ratio_lock:
     'targetAspectRatio is read-only; a previous arbitrary ratio cannot be faithfully restored',

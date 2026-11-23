@@ -22,6 +22,10 @@ type Plan = {
   state: string;
 };
 
+/** 取集合里指定名字的模式 id，集合缺失或没有该模式时返回 null。 */
+const modeId = (c: VariableCollection | null, name: string): string | null =>
+  c?.modes.find(m => m.name === name)?.modeId ?? null;
+
 /** 在库集合里取第一个变量并导入，借它拿到远程集合对象（Figma 只通过变量发放远程集合）。 */
 const resolveLibraryCollection = async (
   figmaCtx: typeof figma,
@@ -105,6 +109,7 @@ export const createRebuildOrphanButtonsHandler =
       scanned++;
       let main: ComponentNode | null = null;
       try {
+        // oxlint-disable-next-line no-await-in-loop -- 逐个解析，避免一次发起上千个异步查询。
         main = await n.getMainComponentAsync();
       } catch {
         main = null;
@@ -164,9 +169,6 @@ export const createRebuildOrphanButtonsHandler =
       size: await resolveLibraryCollection(figmaCtx, p.modeCollections.size),
       state: await resolveLibraryCollection(figmaCtx, p.modeCollections.state),
     };
-    const modeId = (c: VariableCollection | null, name: string): string | null =>
-      c?.modes.find(m => m.name === name)?.modeId ?? null;
-
     let rebuilt = 0;
     const failed: Array<{ id: string; reason: string }> = [];
     for (const { node, plan } of plans) {

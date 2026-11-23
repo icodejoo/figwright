@@ -47,6 +47,7 @@ import {
   resolveBatchImagePaths,
   resolveImagePath,
 } from './tools/import-image.js';
+import { IMPORT_SVG_TOOL_NAME, resolveSvgPath } from './tools/import-svg.js';
 import { handleLayoutTool } from './tools/layout-tools.js';
 import { handleListFiles, LIST_FILES_TOOL_NAME } from './tools/list-files.js';
 import { captureNotices, withRoutingNotice, withSkewNotice } from './tools/notices.js';
@@ -281,6 +282,7 @@ const createMcpServer = (): McpServer => {
         // including inside a batch, whose ops go to the sandbox without passing their own tool.
         let args = rawArgs;
         if (IMAGE_PATH_TOOLS.has(spec.name)) args = await resolveImagePath(rawArgs, spec.name);
+        if (spec.name === IMPORT_SVG_TOOL_NAME) args = await resolveSvgPath(rawArgs);
         if (spec.name === BATCH_TOOL_NAME) args = await resolveBatchImagePaths(rawArgs);
         // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
         const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
